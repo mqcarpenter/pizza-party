@@ -1,0 +1,6 @@
+# Real credentials — never commit
+config.php
+
+# OS / editor noise
+.DS_Store
+*.swp

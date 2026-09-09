@@ -1,0 +1,47 @@
+# Apache: keep non-public files from being served.
+# .sql files hold database credentials/schema; config.php holds credentials;
+# the .git directory exposes history. None of these should ever be fetchable.
+#
+# This directory sits inside a WordPress install (licoricepizzareviews.com).
+# WordPress's own rewrite rules exempt real files/directories
+# (RewriteCond %{REQUEST_FILENAME} !-f / !-d), so this subdirectory is left
+# alone — nothing here needs to touch WordPress's rewrite chain.
+
+<IfModule mod_authz_core.c>
+  <FilesMatch "\.(sql|md)$">
+    Require all denied
+  </FilesMatch>
+  <Files "config.php">
+    Require all denied
+  </Files>
+  <Files "config.example.php">
+    Require all denied
+  </Files>
+</IfModule>
+
+<IfModule !mod_authz_core.c>
+  <FilesMatch "\.(sql|md)$">
+    Order allow,deny
+    Deny from all
+  </FilesMatch>
+  <Files "config.php">
+    Order allow,deny
+    Deny from all
+  </Files>
+</IfModule>
+
+RedirectMatch 404 /\.git
+RedirectMatch 404 /migrations/
+
+<IfModule mod_mime.c>
+  AddType application/manifest+json .webmanifest
+</IfModule>
+
+<IfModule mod_headers.c>
+  <Files "sw.js">
+    Header set Cache-Control "no-cache, must-revalidate"
+  </Files>
+  <Files "manifest.json">
+    Header set Cache-Control "no-cache"
+  </Files>
+</IfModule>
