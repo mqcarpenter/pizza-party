@@ -31,15 +31,16 @@ the `markgrace` card tracker.
 
 1. Register a Discogs application at
    https://www.discogs.com/settings/developers to get a Consumer Key/Secret.
-2. `cp config.example.php config.php` and fill in:
+2. Create `config.php` (gitignored) and fill in:
    - The `db`/`db_admin` blocks — same host/user/pass as markgrace's
-     `config.php` (see comments in `config.example.php`).
+     `config.php` (the shared database is `otbdesig_wp298`).
    - The `discogs` block — consumer key/secret, and `callback_url` pointing
      at `https://licoricepizzareviews.com/pizzaparty/api/index.php?action=discogs-callback`.
-3. Run the schema and grants, as a MySQL admin, against markgrace's database:
+3. Run the schema and grants, as a MySQL admin, against markgrace's database
+   (`otbdesig_wp298`):
    ```
-   mysql -u ADMIN -p markgrace < migrations/schema.sql
-   mysql -u ADMIN -p markgrace < migrations/grants.sql
+   mysql -u ADMIN -p otbdesig_wp298 < migrations/schema.sql
+   mysql -u ADMIN -p otbdesig_wp298 < migrations/grants.sql
    ```
 4. Deploy this directory to `/pizzaparty` under the licoricepizzareviews.com
    docroot. Being a real subdirectory, WordPress's rewrite rules
