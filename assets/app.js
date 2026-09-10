@@ -367,7 +367,7 @@
      on a phone. Built from the Collection cache: "concentration in style"
      means what you actually own. */
 
-  function barChart(counts, max) {
+  function barChart(counts, max, kind) {
     var top = Object.keys(counts)
       .map(function (k) { return [k, counts[k]]; })
       .sort(function (a, b) { return b[1] - a[1]; })
@@ -378,7 +378,7 @@
       var pct = Math.max(4, Math.round((row[1] / peak) * 100));
       var rankCls = i < 3 ? ' rank-' + (i + 1) : '';
       return (
-        '<div class="barchart-row">' +
+        '<div class="barchart-row" data-kind="' + kind + '" data-value="' + esc(row[0]) + '" title="See these in your Collection">' +
           '<div class="barchart-rank' + rankCls + '">' + (i + 1) + '</div>' +
           '<div class="barchart-label">' + esc(row[0]) + '</div>' +
           '<div class="barchart-track">' +
@@ -422,9 +422,24 @@
       statTile(Object.keys(genreCounts).length.toLocaleString(), 'Genres') +
       statTile(topDecade, 'Favorite era');
 
-    document.getElementById('genreChart').innerHTML = barChart(genreCounts, 12);
-    document.getElementById('artistChart').innerHTML = barChart(artistCounts, 12);
+    document.getElementById('genreChart').innerHTML = barChart(genreCounts, 12, 'genre');
+    document.getElementById('artistChart').innerHTML = barChart(artistCounts, 12, 'artist');
   }
+
+  document.getElementById('stats').addEventListener('click', function (e) {
+    var row = e.target.closest('.barchart-row');
+    if (!row) return;
+    tab = 'collection';
+    genre = row.dataset.kind === 'genre' ? row.dataset.value : 'all';
+    query = row.dataset.kind === 'artist' ? row.dataset.value : '';
+    document.getElementById('q').value = query;
+    [].forEach.call(document.querySelectorAll('#tabs .tab'), function (t) {
+      t.setAttribute('aria-selected', t.dataset.tab === 'collection' ? 'true' : 'false');
+    });
+    document.getElementById('addForm').classList.add('hide');
+    document.getElementById('searchResults').classList.add('hide');
+    render();
+  });
 
   list.addEventListener('click', async function (e) {
     var removeBtn = e.target.closest('.remove');
@@ -556,10 +571,11 @@
       }).join('') + '</div>';
     }
     if (data.similarAlbums && data.similarAlbums.length) {
-      html += '<div class="details-heading">In a similar style</div>';
+      html += '<div class="details-heading">Similar albums</div>';
       html += '<ul class="details-albums">' + data.similarAlbums.map(function (al) {
         var label = esc(al.artist) + ' — ' + esc(al.title);
-        return '<li>' + (al.url ? '<a href="' + esc(al.url) + '" target="_blank" rel="noopener">' + label + '</a>' : label) + '</li>';
+        var tag = al.tag ? ' <span class="viatag">via #' + esc(al.tag) + '</span>' : '';
+        return '<li>' + (al.url ? '<a href="' + esc(al.url) + '" target="_blank" rel="noopener">' + label + '</a>' : label) + tag + '</li>';
       }).join('') + '</ul>';
     }
     return html || '<p class="details-loading">No Last.fm data found for this release.</p>';
@@ -584,7 +600,7 @@
       t.setAttribute('aria-selected', t === b ? 'true' : 'false');
     });
     document.getElementById('addForm').classList.toggle('hide', tab !== 'wantlist');
-    document.getElementById('addHint').classList.toggle('hide', tab !== 'wantlist');
+    if (tab !== 'wantlist') document.getElementById('searchResults').classList.add('hide');
     render();
   });
 
@@ -606,28 +622,70 @@
     render();
   });
 
+  function searchResultRow(item) {
+    var thumb = item.thumb
+      ? '<img class="thumb" src="' + esc(item.thumb) + '" alt="" loading="lazy">'
+      : '<div class="thumb placeholder"></div>';
+    var meta = [item.year, item.format].filter(Boolean).join(' · ');
+    var already = WANTLIST.some(function (i) { return i.releaseId === item.releaseId; }) ||
+                  COLLECTION.some(function (i) { return i.releaseId === item.releaseId; });
+    return (
+      '<li class="card searchresult">' +
+        '<div class="card-main">' +
+          thumb +
+          '<div class="body">' +
+            '<div class="artist">' + esc(item.artist || 'Unknown artist') + '</div>' +
+            '<div class="title">' + esc(item.title || 'Untitled') + '</div>' +
+            '<div class="meta">' + esc(meta) + '</div>' +
+          '</div>' +
+          '<div class="actions">' +
+            (already
+              ? '<span class="already">Already added</span>'
+              : '<button class="addwant" data-id="' + item.releaseId + '" type="button">Add</button>') +
+          '</div>' +
+        '</div>' +
+      '</li>'
+    );
+  }
+
   document.getElementById('addForm').addEventListener('submit', async function (e) {
     e.preventDefault();
-    var input = document.getElementById('addReleaseId');
-    var id = parseInt(input.value, 10);
-    if (!id || id <= 0) { say('Enter a numeric Discogs release ID.', true); return; }
-    if (WANTLIST.some(function (i) { return i.releaseId === id; })) {
-      say('Already on your wantlist.');
-      return;
-    }
+    var input = document.getElementById('addQuery');
+    var q = input.value.trim();
+    var results = document.getElementById('searchResults');
+    if (!q) { say('Enter something to search for.', true); return; }
     var btn = this.querySelector('button');
+    btn.disabled = true;
+    results.classList.remove('hide');
+    results.innerHTML = '<p class="details-loading">Searching Discogs&hellip;</p>';
+    try {
+      var d = await api('?action=search&q=' + encodeURIComponent(q));
+      var items = d.items || [];
+      results.innerHTML = items.length
+        ? '<ul class="searchlist">' + items.map(searchResultRow).join('') + '</ul>'
+        : '<p class="details-loading">No results.</p>';
+    } catch (e2) {
+      results.innerHTML = '<p class="details-loading">Search failed: ' + esc(e2.message) + '</p>';
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  document.getElementById('searchResults').addEventListener('click', async function (e) {
+    var btn = e.target.closest('.addwant');
+    if (!btn) return;
+    var id = parseInt(btn.dataset.id, 10);
     btn.disabled = true;
     try {
       await gatedPost('wantlist-add', { releaseId: id });
       var w = await api('?action=wantlist');
       WANTLIST = w.items || [];
-      input.value = '';
+      btn.outerHTML = '<span class="already">Added</span>';
+      say('Added to your wantlist.');
       render();
-      say('Added.');
     } catch (e2) {
-      if (e2.message !== 'locked' && e2.code !== 'passkey_required') say('Not added: ' + e2.message, true);
-    } finally {
       btn.disabled = false;
+      if (e2.message !== 'locked' && e2.code !== 'passkey_required') say('Not added: ' + e2.message, true);
     }
   });
 

@@ -88,12 +88,11 @@
       <div class="chips genrechips hide" id="genreChips"></div>
 
       <form class="addrow hide" id="addForm">
-        <input class="addinput" id="addReleaseId" type="text" inputmode="numeric"
-               placeholder="Discogs release ID to add&hellip;" autocomplete="off">
-        <button type="submit">Add</button>
+        <input class="addinput" id="addQuery" type="search"
+               placeholder="Search Discogs to add&hellip;" autocomplete="off">
+        <button type="submit">Search</button>
       </form>
-      <p class="hint hide" id="addHint">Paste the release ID from a discogs.com release URL
-        (e.g. discogs.com/release/<b>249504</b>). Search-to-add is coming later.</p>
+      <div class="searchresults hide" id="searchResults"></div>
     </div>
 
     <main id="list"></main>

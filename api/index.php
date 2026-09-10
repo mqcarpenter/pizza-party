@@ -310,6 +310,41 @@ if ($method === 'GET' && $action === 'wantlist') {
     out(['items' => array_map(fn($r) => row_to_item($r, true), $rows)]);
 }
 
+// ---- live Discogs search (read-only, ungated) --------------------------
+
+if ($method === 'GET' && $action === 'search') {
+    require_unlocked();
+    $q = trim((string)($_GET['q'] ?? ''));
+    if ($q === '') out(['error' => 'Missing q.'], 400);
+
+    [$status, $json] = discogs_signed_request('GET', DISCOGS_API_BASE . '/database/search', [
+        'q' => $q, 'type' => 'release', 'per_page' => 25, 'page' => 1,
+    ]);
+    if ($status !== 200) out(['error' => 'Discogs search failed.', 'detail' => $json], 502);
+
+    $items = array_map(function ($r) {
+        // Discogs search results title releases as "Artist - Title" — split
+        // it so the card can show them the same way as everything else.
+        $title = (string)($r['title'] ?? '');
+        $artist = null;
+        if (strpos($title, ' - ') !== false) {
+            [$artist, $title] = explode(' - ', $title, 2);
+        }
+        return [
+            'releaseId' => $r['id'] ?? null,
+            'artist'    => $artist,
+            'title'     => $title,
+            'year'      => $r['year'] ?? null,
+            'format'    => implode(', ', $r['format'] ?? []),
+            'label'     => implode(', ', $r['label'] ?? []),
+            'genres'    => implode(', ', $r['genre'] ?? []),
+            'styles'    => implode(', ', $r['style'] ?? []),
+            'thumb'     => $r['thumb'] ?: null,
+        ];
+    }, $json['results'] ?? []);
+    out(['items' => $items]);
+}
+
 // ---- gated writes: wantlist add / remove / note -----------------------
 
 if ($method === 'POST' && $action === 'wantlist-add') {

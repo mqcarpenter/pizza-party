@@ -92,8 +92,9 @@ function lastfm_cached(string $method, array $params): array {
 /**
  * Everything the "Details" panel needs for one release, in one call:
  * album stats/tags/url, similar artists, and a few albums from each of the
- * top couple of similar artists as an honest stand-in for "similar albums"
- * — Last.fm has no true album-similarity endpoint.
+ * top couple of the album's own tags — Last.fm has no true album-similarity
+ * endpoint, but a shared-tag lookup ranks by genuine album-level style
+ * rather than "other albums by an artist who happens to sound similar."
  */
 function lastfm_detail(string $artist, string $title): array {
     $cleanArtist = lastfm_clean_artist($artist);
@@ -117,37 +118,43 @@ function lastfm_detail(string $artist, string $title): array {
     }
 
     $similarArtists = [];
-    $similarAlbums = [];
     try {
         $r = lastfm_cached('artist.getsimilar', ['artist' => $cleanArtist, 'autocorrect' => 1, 'limit' => 6]);
-        $rows = $r['similarartists']['artist'] ?? [];
-        foreach ($rows as $sa) {
+        foreach ($r['similarartists']['artist'] ?? [] as $sa) {
             $similarArtists[] = [
                 'name'  => $sa['name'] ?? '',
                 'url'   => $sa['url'] ?? null,
                 'match' => isset($sa['match']) ? round((float)$sa['match'], 2) : null,
             ];
         }
-        // A few albums from the top 2 similar artists, as a proxy for
-        // "similar albums" — labeled honestly in the UI, not claimed as a
-        // precise match.
-        foreach (array_slice($similarArtists, 0, 2) as $sa) {
+    } catch (Throwable $e) {
+        error_log('lastfm artist.getsimilar: ' . $e->getMessage());
+    }
+
+    $similarAlbums = [];
+    if ($album && !empty($album['tags'])) {
+        $seen = [strtolower($cleanArtist . '|' . $title)];
+        foreach (array_slice($album['tags'], 0, 2) as $tag) {
             try {
-                $ta = lastfm_cached('artist.gettopalbums', ['artist' => $sa['name'], 'autocorrect' => 1, 'limit' => 3]);
-                foreach ($ta['topalbums']['album'] ?? [] as $al) {
+                $ta = lastfm_cached('tag.gettopalbums', ['tag' => $tag, 'limit' => 8]);
+                foreach ($ta['albums']['album'] ?? [] as $al) {
                     if (empty($al['name'])) continue;
+                    $albumArtist = $al['artist']['name'] ?? '';
+                    $key = strtolower($albumArtist . '|' . $al['name']);
+                    if (in_array($key, $seen, true)) continue;
+                    $seen[] = $key;
                     $similarAlbums[] = [
-                        'artist' => $al['artist']['name'] ?? $sa['name'],
+                        'artist' => $albumArtist,
                         'title'  => $al['name'],
                         'url'    => $al['url'] ?? null,
+                        'tag'    => $tag,
                     ];
                 }
             } catch (Throwable $e) {
-                error_log('lastfm artist.gettopalbums: ' . $e->getMessage());
+                error_log('lastfm tag.gettopalbums: ' . $e->getMessage());
             }
         }
-    } catch (Throwable $e) {
-        error_log('lastfm artist.getsimilar: ' . $e->getMessage());
+        $similarAlbums = array_slice($similarAlbums, 0, 8);
     }
 
     return [

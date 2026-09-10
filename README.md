@@ -90,8 +90,12 @@ orange so white button text clears WCAG AA contrast; `--accent-bright` carries
 the true logo color for decorative surfaces (gradients, chart fills) where no
 text sits directly on it.
 
-## Not yet built (phase 2)
+## Genre data
 
-Adding a wantlist item currently requires typing in a known Discogs release
-ID (see the "Add" box on the Wantlist tab). A proper search-and-pick flow
-against Discogs' `/database/search` endpoint is planned but not yet built.
+Genres/styles shown in the app come straight from Discogs' own
+`basic_information.genres`/`styles` fields on each release, synced verbatim
+(`sync-collection.php`, `sync-wantlist.php`) — the same values Discogs shows
+on the release's own page. Discogs' genre taxonomy is broad and
+crowd-sourced, so mis-tagging on individual releases does happen. Tap a bar
+in the Stats tab to jump to the Collection tab pre-filtered to that genre, to
+see exactly which releases are contributing to a count that looks off.
