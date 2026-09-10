@@ -98,3 +98,14 @@ CREATE TABLE IF NOT EXISTS pizzaparty_lastfm_cache (
   fetched_at  DATETIME     NOT NULL,
   UNIQUE KEY uniq_cache_key (cache_key)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Caches resolving a (artist, title) pair to its Discogs master release's
+-- "main release" — used to give a Last.fm-sourced "similar album" an
+-- addable Discogs link/release id.
+CREATE TABLE IF NOT EXISTS pizzaparty_discogs_cache (
+  id          INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  cache_key   VARCHAR(255) NOT NULL,
+  payload     LONGTEXT     NOT NULL,
+  fetched_at  DATETIME     NOT NULL,
+  UNIQUE KEY uniq_cache_key (cache_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

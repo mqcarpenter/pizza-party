@@ -200,3 +200,78 @@ function discogs_signed_request(string $method, string $url, array $queryParams 
     [$status, $json, $body] = discogs_request($method, $url, $queryParams, $token, $tokenSecret);
     return [$status, $json ?? ['_raw' => $body]];
 }
+
+// ---- resolving a bare (artist, title) to a real Discogs release --------
+//
+// Used to give a Last.fm-sourced "similar album" suggestion an addable
+// Discogs release id, rather than only a dead-end link to Last.fm.
+
+const DISCOGS_RESOLVE_CACHE_TTL_DAYS = 30;
+
+function discogs_resolve_cache_get(string $key): ?array {
+    $st = db()->prepare('SELECT payload FROM pizzaparty_discogs_cache WHERE cache_key = :k AND fetched_at > :cutoff');
+    $st->execute([':k' => $key, ':cutoff' => date('Y-m-d H:i:s', time() - DISCOGS_RESOLVE_CACHE_TTL_DAYS * 86400)]);
+    $row = $st->fetch();
+    return $row ? json_decode($row['payload'], true) : null;
+}
+
+function discogs_resolve_cache_put(string $key, ?array $payload): void {
+    $st = db()->prepare(
+        'INSERT INTO pizzaparty_discogs_cache (cache_key, payload, fetched_at) VALUES (:k, :p, NOW())
+         ON DUPLICATE KEY UPDATE payload = VALUES(payload), fetched_at = VALUES(fetched_at)'
+    );
+    // json_encode(null) is the literal string "null", which json_decode()
+    // reads back as null — a negative (no match found) is cached too, so a
+    // known-obscure title doesn't retry Discogs on every expand.
+    $st->execute([':k' => $key, ':p' => json_encode($payload)]);
+}
+
+/**
+ * Finds the release Discogs itself considers the definitive pressing of an
+ * (artist, title) — a master release's `main_release` — rather than every
+ * individual country/format variant a plain release search would return.
+ * Returns null if nothing matched. Cached, since this is called once per
+ * "similar album" suggestion and that data almost never changes.
+ */
+function discogs_resolve_release(string $artist, string $title): ?array {
+    $key = 'resolve|' . strtolower($artist . '|' . $title);
+    // A cache miss and a cached "no match" both decode to null here, so an
+    // unresolvable title gets retried against Discogs once per TTL window
+    // rather than being remembered as permanently unresolvable — an
+    // acceptable cost for the simplicity.
+    $cached = discogs_resolve_cache_get($key);
+    if ($cached !== null) return $cached ?: null;
+
+    try {
+        [$status, $json] = discogs_signed_request('GET', DISCOGS_API_BASE . '/database/search', [
+            'q' => $artist . ' ' . $title, 'type' => 'master', 'per_page' => 1,
+        ]);
+        $result = $status === 200 ? ($json['results'][0] ?? null) : null;
+        if (!$result) {
+            discogs_resolve_cache_put($key, null);
+            return null;
+        }
+
+        $releaseId = $result['main_release'] ?? null;
+        if (!$releaseId && !empty($result['id'])) {
+            // Some search responses omit main_release inline — fetch the master.
+            [$mStatus, $mJson] = discogs_signed_request('GET', DISCOGS_API_BASE . '/masters/' . $result['id']);
+            if ($mStatus === 200) $releaseId = $mJson['main_release'] ?? null;
+        }
+        if (!$releaseId) {
+            discogs_resolve_cache_put($key, null);
+            return null;
+        }
+
+        $resolved = [
+            'releaseId' => (int)$releaseId,
+            'thumb'     => $result['thumb'] ?? null,
+            'year'      => $result['year'] ?? null,
+        ];
+        discogs_resolve_cache_put($key, $resolved);
+        return $resolved;
+    } catch (Throwable $e) {
+        error_log('discogs_resolve_release: ' . $e->getMessage());
+        return null;
+    }
+}

@@ -155,6 +155,20 @@ function lastfm_detail(string $artist, string $title): array {
             }
         }
         $similarAlbums = array_slice($similarAlbums, 0, 8);
+
+        // Tie each suggestion back to a real, addable Discogs release — the
+        // master's "main release" (Discogs' own pick for the definitive
+        // pressing), not every country/format variant a plain search would
+        // surface. Best-effort: a miss just leaves the Last.fm link as-is.
+        foreach ($similarAlbums as &$sa) {
+            $resolved = discogs_resolve_release($sa['artist'], $sa['title']);
+            if ($resolved) {
+                $sa['releaseId'] = $resolved['releaseId'];
+                $sa['thumb']     = $resolved['thumb'];
+                $sa['year']      = $resolved['year'];
+            }
+        }
+        unset($sa);
     }
 
     return [

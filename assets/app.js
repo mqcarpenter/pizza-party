@@ -520,6 +520,23 @@
       }
       return;
     }
+
+    var addSimBtn = e.target.closest('.addsimilar');
+    if (addSimBtn) {
+      var simId = parseInt(addSimBtn.dataset.id, 10);
+      addSimBtn.disabled = true;
+      try {
+        await gatedPost('wantlist-add', { releaseId: simId });
+        var w2 = await api('?action=wantlist');
+        WANTLIST = w2.items || [];
+        addSimBtn.outerHTML = '<span class="already">Added</span>';
+        say('Added to your wantlist.');
+      } catch (e4) {
+        addSimBtn.disabled = false;
+        if (e4.message !== 'locked' && e4.code !== 'passkey_required') say('Not added: ' + e4.message, true);
+      }
+      return;
+    }
   });
 
   /* ---------- Last.fm details panel ----------
@@ -575,7 +592,24 @@
       html += '<ul class="details-albums">' + data.similarAlbums.map(function (al) {
         var label = esc(al.artist) + ' — ' + esc(al.title);
         var tag = al.tag ? ' <span class="viatag">via #' + esc(al.tag) + '</span>' : '';
-        return '<li>' + (al.url ? '<a href="' + esc(al.url) + '" target="_blank" rel="noopener">' + label + '</a>' : label) + tag + '</li>';
+        var link;
+        if (al.releaseId) {
+          link = '<a href="https://www.discogs.com/release/' + al.releaseId + '" target="_blank" rel="noopener">' + label + '</a>';
+        } else if (al.url) {
+          link = '<a href="' + esc(al.url) + '" target="_blank" rel="noopener">' + label + '</a>';
+        } else {
+          link = label;
+        }
+        var already = al.releaseId && (
+          WANTLIST.some(function (i) { return i.releaseId === al.releaseId; }) ||
+          COLLECTION.some(function (i) { return i.releaseId === al.releaseId; })
+        );
+        var action = al.releaseId
+          ? (already
+              ? ' <span class="already">Already added</span>'
+              : ' <button class="addsimilar" data-id="' + al.releaseId + '" type="button">Add</button>')
+          : '';
+        return '<li>' + link + tag + action + '</li>';
       }).join('') + '</ul>';
     }
     return html || '<p class="details-loading">No Last.fm data found for this release.</p>';

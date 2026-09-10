@@ -27,11 +27,19 @@ the `markgrace` card tracker.
   domains, so a passkey registered for one cannot authenticate the other.
   You'll register your iPhone here separately (one extra Face ID tap).
 - **Last.fm enrichment** (`lastfm.php`): tapping "Details" on any card
-  lazy-loads listener/playcount stats, tags, similar artists, and a few
-  albums from those similar artists (an honest stand-in for "similar
-  albums" — Last.fm has no true album-similarity endpoint) from Last.fm's
-  API, cached in `pizzaparty_lastfm_cache` for 30 days so it's at most one
-  live Last.fm call per release, ever. Read-only — no OAuth, just an API key.
+  lazy-loads listener/playcount stats, tags, similar artists, and similar
+  albums (via a shared-tag lookup against the release's own top tags —
+  Last.fm has no true album-similarity endpoint, but this ranks by genuine
+  style rather than "other albums by an artist who sounds similar"), cached
+  in `pizzaparty_lastfm_cache` for 30 days. Read-only — no OAuth, just an
+  API key.
+- **Discogs resolve** (`discogs_oauth.php`'s `discogs_resolve_release()`):
+  each similar-album suggestion is tied back to a real Discogs release —
+  specifically the release its Discogs *master* designates as the
+  `main_release` (Discogs' own pick for the definitive pressing), not every
+  country/format variant a plain search would return — so it's addable to
+  your wantlist directly from the Details panel. Cached in
+  `pizzaparty_discogs_cache` for 30 days.
 - **Ratings**: a 5-star control on each card writes Discogs' own rating
   field — the wantlist's native 0-5 rating for Wantlist items, and the
   collection's native per-instance 0-5 rating for Collection items — so it
@@ -57,6 +65,7 @@ the `markgrace` card tracker.
    mysql -u ADMIN -p otbdesig_wp298 < migrations/grants.sql
    mysql -u ADMIN -p otbdesig_wp298 < migrations/migrate-002-wantlist-genres.sql
    mysql -u ADMIN -p otbdesig_wp298 < migrations/migrate-003-lastfm-and-collection-rating.sql
+   mysql -u ADMIN -p otbdesig_wp298 < migrations/migrate-004-discogs-resolve-cache.sql
    ```
    Raw `GRANT` statements don't work on cPanel accounts without GRANT
    privilege (common on shared hosting) — if `grants.sql` errors with
