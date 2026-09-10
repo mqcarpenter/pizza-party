@@ -46,17 +46,28 @@ function oauth_signature(string $method, string $url, array $params, string $con
 /**
  * Signs and sends a Discogs API request. $token/$tokenSecret are the stored
  * access token (or, mid-handshake, the temporary request token).
+ *
+ * $params means different things depending on $method: for GET it's the
+ * query string (pagination, sort — participates in the OAuth1 signature
+ * alongside the oauth_ params, per spec). For anything else it's sent as a
+ * JSON request body — Discogs' newer write endpoints (e.g. the collection
+ * instance-rating update) strictly require a JSON body and reject query
+ * params with a "Field required" validation error. A JSON body is not
+ * form-urlencoded, so per the OAuth1 spec it is deliberately excluded from
+ * the signature base string — only the oauth_ params sign a JSON-body call.
+ *
  * Returns [httpStatus, decodedJsonOrNull, rawBody].
  */
 function discogs_request(
     string $method,
     string $url,
-    array $queryParams = [],
+    array $params = [],
     ?string $token = null,
     ?string $tokenSecret = null,
     array $extraOauthParams = []
 ): array {
     $cfg = discogs_config();
+    $isGet = strtoupper($method) === 'GET';
 
     $oauthParams = array_merge([
         'oauth_consumer_key'     => $cfg['consumer_key'],
@@ -67,8 +78,8 @@ function discogs_request(
     ], $extraOauthParams);
     if ($token !== null) $oauthParams['oauth_token'] = $token;
 
-    $allParams = array_merge($oauthParams, $queryParams);
-    $oauthParams['oauth_signature'] = oauth_signature($method, $url, $allParams, $cfg['consumer_secret'], (string)$tokenSecret);
+    $signParams = $isGet ? array_merge($oauthParams, $params) : $oauthParams;
+    $oauthParams['oauth_signature'] = oauth_signature($method, $url, $signParams, $cfg['consumer_secret'], (string)$tokenSecret);
 
     $authHeaderParts = [];
     foreach ($oauthParams as $k => $v) {
@@ -77,18 +88,23 @@ function discogs_request(
     $authHeader = 'OAuth ' . implode(', ', $authHeaderParts);
 
     $fullUrl = $url;
-    if ($queryParams) $fullUrl .= '?' . http_build_query($queryParams);
-
-    $ch = curl_init($fullUrl);
-    curl_setopt_array($ch, [
+    $headers = ['Authorization: ' . $authHeader, 'User-Agent: ' . $cfg['user_agent']];
+    $curlOpts = [
         CURLOPT_CUSTOMREQUEST  => $method,
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_TIMEOUT        => 30,
-        CURLOPT_HTTPHEADER     => [
-            'Authorization: ' . $authHeader,
-            'User-Agent: ' . $cfg['user_agent'],
-        ],
-    ]);
+    ];
+
+    if ($isGet) {
+        if ($params) $fullUrl .= '?' . http_build_query($params);
+    } elseif ($params) {
+        $curlOpts[CURLOPT_POSTFIELDS] = json_encode($params);
+        $headers[] = 'Content-Type: application/json';
+    }
+    $curlOpts[CURLOPT_HTTPHEADER] = $headers;
+
+    $ch = curl_init($fullUrl);
+    curl_setopt_array($ch, $curlOpts);
     $body   = curl_exec($ch);
     if ($body === false) {
         $err = curl_error($ch);
