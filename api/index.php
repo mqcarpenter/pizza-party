@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require __DIR__ . '/../db.php';
 require __DIR__ . '/../discogs_oauth.php';
+require __DIR__ . '/../lastfm.php';
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
@@ -284,20 +285,17 @@ function row_to_item(array $r, bool $isWant = false): array {
         'styles'    => $r['styles'],
         'thumb'     => $r['thumb_url'],
         'notes'     => $r['notes'],
+        'rating'    => isset($r['rating']) && $r['rating'] !== null ? (int)$r['rating'] : null,
         'dateAdded' => $r['date_added'],
     ];
-    if ($isWant) {
-        $out['rating'] = $r['rating'] !== null ? (int)$r['rating'] : null;
-    } else {
-        $out['instanceId'] = (int)$r['instance_id'];
-    }
+    if (!$isWant) $out['instanceId'] = (int)$r['instance_id'];
     return $out;
 }
 
 if ($method === 'GET' && $action === 'collection') {
     require_unlocked();
     $rows = db()->query(
-        'SELECT release_id, instance_id, artist, title, year, format, label, genres, styles, thumb_url, notes, date_added
+        'SELECT release_id, instance_id, artist, title, year, format, label, genres, styles, thumb_url, notes, rating, date_added
            FROM pizzaparty_collection_items ORDER BY artist ASC, year ASC'
     )->fetchAll();
     out(['items' => array_map(fn($r) => row_to_item($r, false), $rows)]);
@@ -384,6 +382,79 @@ if ($method === 'POST' && $action === 'wantlist-remove') {
     out(['ok' => true, 'releaseId' => $releaseId]);
 }
 
+if ($method === 'POST' && $action === 'wantlist-to-collection') {
+    require_unlocked();
+    require_write_access();
+    $d = body();
+    $releaseId = (int)($d['releaseId'] ?? 0);
+    if ($releaseId <= 0) out(['error' => 'Missing releaseId.'], 400);
+
+    $wst = db()->prepare(
+        'SELECT artist, title, year, format, label, genres, styles, thumb_url
+           FROM pizzaparty_wantlist_items WHERE release_id = ?'
+    );
+    $wst->execute([$releaseId]);
+    $cached = $wst->fetch();
+    if (!$cached) out(['error' => 'That release is not on your wantlist.'], 404);
+
+    $auth = discogs_auth_row();
+
+    // Discogs has no "move" endpoint — add to a real collection folder (1 =
+    // the default "Uncategorized" folder; 0 is the virtual "All" folder and
+    // can't be added to directly), then remove the wantlist entry.
+    [$addStatus, $addJson] = discogs_signed_request(
+        'POST',
+        DISCOGS_API_BASE . '/users/' . rawurlencode($auth['discogs_username']) . '/collection/folders/1/releases/' . $releaseId
+    );
+    if ($addStatus !== 201 && $addStatus !== 200) {
+        out(['error' => 'Discogs rejected adding it to your collection.', 'detail' => $addJson], 502);
+    }
+    $instanceId = $addJson['instance_id'] ?? null;
+    if (!$instanceId) out(['error' => 'Discogs did not return an instance id.'], 502);
+
+    [$rmStatus, $rmJson] = discogs_signed_request(
+        'DELETE',
+        DISCOGS_API_BASE . '/users/' . rawurlencode($auth['discogs_username']) . '/wants/' . $releaseId
+    );
+    if ($rmStatus !== 204 && $rmStatus !== 200) {
+        // The collection add already succeeded — leaving the wantlist entry
+        // behind is a harmless duplicate the next sync will reconcile,
+        // better than losing track of the successful add.
+        error_log('wantlist-to-collection: collection add ok but wantlist removal failed: ' . json_encode($rmJson));
+    }
+
+    $cst = db()->prepare(
+        'INSERT INTO pizzaparty_collection_items
+            (release_id, instance_id, folder_id, artist, title, year, format, label, genres, styles, thumb_url, date_added, raw_json)
+         VALUES (:release_id, :instance_id, 1, :artist, :title, :year, :format, :label, :genres, :styles, :thumb_url, NOW(), :raw_json)
+         ON DUPLICATE KEY UPDATE
+            release_id = VALUES(release_id), folder_id = VALUES(folder_id), raw_json = VALUES(raw_json)'
+    );
+    $cst->execute([
+        ':release_id'  => $releaseId,
+        ':instance_id' => $instanceId,
+        ':artist'      => $cached['artist'],
+        ':title'       => $cached['title'],
+        ':year'        => $cached['year'],
+        ':format'      => $cached['format'],
+        ':label'       => $cached['label'],
+        ':genres'      => $cached['genres'],
+        ':styles'      => $cached['styles'],
+        ':thumb_url'   => $cached['thumb_url'],
+        ':raw_json'    => json_encode($addJson),
+    ]);
+    db()->prepare('DELETE FROM pizzaparty_wantlist_items WHERE release_id = ?')->execute([$releaseId]);
+
+    $item = row_to_item(array_merge($cached, [
+        'release_id'  => $releaseId,
+        'instance_id' => $instanceId,
+        'notes'       => null,
+        'rating'      => null,
+        'date_added'  => date('Y-m-d H:i:s'),
+    ]), false);
+    out(['ok' => true, 'releaseId' => $releaseId, 'item' => $item]);
+}
+
 if ($method === 'POST' && $action === 'wantlist-note') {
     require_unlocked();
     require_write_access();
@@ -412,6 +483,52 @@ if ($method === 'POST' && $action === 'wantlist-note') {
         ':id' => $releaseId,
     ]);
     out(['ok' => true, 'releaseId' => $releaseId]);
+}
+
+// ---- collection rating (Discogs' own per-instance 0-5 rating) --------
+
+if ($method === 'POST' && $action === 'collection-rate') {
+    require_unlocked();
+    require_write_access();
+    $d = body();
+    $instanceId = (int)($d['instanceId'] ?? 0);
+    $rating = isset($d['rating']) ? (int)$d['rating'] : 0;
+    if ($instanceId <= 0) out(['error' => 'Missing instanceId.'], 400);
+    if ($rating < 0 || $rating > 5) out(['error' => 'Rating must be 0-5.'], 400);
+
+    $rowSt = db()->prepare('SELECT release_id, folder_id FROM pizzaparty_collection_items WHERE instance_id = ?');
+    $rowSt->execute([$instanceId]);
+    $rec = $rowSt->fetch();
+    if (!$rec) out(['error' => 'Unknown collection item.'], 404);
+
+    $auth = discogs_auth_row();
+    [$status, $json] = discogs_signed_request(
+        'POST',
+        DISCOGS_API_BASE . '/users/' . rawurlencode($auth['discogs_username']) .
+            '/collection/folders/' . $rec['folder_id'] . '/releases/' . $rec['release_id'] . '/instances/' . $instanceId,
+        ['rating' => $rating]
+    );
+    if ($status !== 204 && $status !== 200) {
+        out(['error' => 'Discogs rejected the rating update.', 'detail' => $json], 502);
+    }
+
+    db()->prepare('UPDATE pizzaparty_collection_items SET rating = :r WHERE instance_id = :id')
+        ->execute([':r' => $rating ?: null, ':id' => $instanceId]);
+    out(['ok' => true, 'instanceId' => $instanceId, 'rating' => $rating ?: null]);
+}
+
+// ---- Last.fm enrichment (read-only, ungated — links/stats/similar) ----
+
+if ($method === 'GET' && $action === 'lastfm-detail') {
+    require_unlocked();
+    $artist = trim((string)($_GET['artist'] ?? ''));
+    $title  = trim((string)($_GET['title'] ?? ''));
+    if ($artist === '' || $title === '') out(['error' => 'Missing artist/title.'], 400);
+    try {
+        out(lastfm_detail($artist, $title));
+    } catch (Throwable $e) {
+        fail('Could not load Last.fm data.', $e);
+    }
 }
 
 out(['error' => 'Unknown endpoint.'], 404);

@@ -10,9 +10,13 @@
 <meta name="apple-mobile-web-app-title" content="Pizza Party">
 <meta name="description" content="Browse your Discogs record collection and wantlist.">
 <title>Pizza Party</title>
-<link rel="stylesheet" href="assets/app.css?v=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Raleway:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="assets/app.css?v=2">
 
 <link rel="manifest" href="manifest.json">
+<link rel="shortcut icon" href="favicon.ico">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <meta name="mobile-web-app-capable" content="yes">
@@ -72,6 +76,15 @@
         <button class="lock open" id="lockBtn" type="button">&mdash;</button>
       </div>
 
+      <div class="sortrow" id="sortrow">
+        <label for="sortSelect">Sort</label>
+        <select id="sortSelect">
+          <option value="artist">Artist</option>
+          <option value="year">Year</option>
+          <option value="title">Title</option>
+        </select>
+      </div>
+
       <div class="chips genrechips hide" id="genreChips"></div>
 
       <form class="addrow hide" id="addForm">
@@ -87,13 +100,15 @@
     <div class="empty hide" id="empty">Nothing here yet.</div>
 
     <div class="stats hide" id="stats">
-      <section class="stats-section">
-        <h2>By genre</h2>
+      <div class="tiles" id="statTiles"></div>
+
+      <section class="stats-section panel">
+        <h2><svg class="vinyl" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10.5"/><circle class="groove" cx="12" cy="12" r="7.2"/><circle class="groove" cx="12" cy="12" r="4.4"/><circle class="hole" cx="12" cy="12" r="1.6"/></svg>By genre</h2>
         <p class="stats-sub">Concentration of your collection by genre.</p>
         <div class="barchart" id="genreChart"></div>
       </section>
-      <section class="stats-section">
-        <h2>By artist</h2>
+      <section class="stats-section panel">
+        <h2><svg class="vinyl" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10.5"/><circle class="groove" cx="12" cy="12" r="7.2"/><circle class="groove" cx="12" cy="12" r="4.4"/><circle class="hole" cx="12" cy="12" r="1.6"/></svg>By artist</h2>
         <p class="stats-sub">Your most-represented artists.</p>
         <div class="barchart" id="artistChart"></div>
       </section>

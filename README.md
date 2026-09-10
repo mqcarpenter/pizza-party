@@ -26,6 +26,16 @@ the `markgrace` card tracker.
   passkey is bound to one origin — markgrace and pizza-party are different
   domains, so a passkey registered for one cannot authenticate the other.
   You'll register your iPhone here separately (one extra Face ID tap).
+- **Last.fm enrichment** (`lastfm.php`): tapping "Details" on any card
+  lazy-loads listener/playcount stats, tags, similar artists, and a few
+  albums from those similar artists (an honest stand-in for "similar
+  albums" — Last.fm has no true album-similarity endpoint) from Last.fm's
+  API, cached in `pizzaparty_lastfm_cache` for 30 days so it's at most one
+  live Last.fm call per release, ever. Read-only — no OAuth, just an API key.
+- **Ratings**: a 5-star control on each card writes Discogs' own rating
+  field — the wantlist's native 0-5 rating for Wantlist items, and the
+  collection's native per-instance 0-5 rating for Collection items — so it
+  round-trips to Discogs like every other write here (Face ID gated).
 
 ## First-time setup
 
@@ -36,12 +46,24 @@ the `markgrace` card tracker.
      `config.php` (the shared database is `otbdesig_wp298`).
    - The `discogs` block — consumer key/secret, and `callback_url` pointing
      at `https://licoricepizzareviews.com/pizzaparty/api/index.php?action=discogs-callback`.
+   - A `'lastfm' => ['api_key' => '...']` block — get a key at
+     https://www.last.fm/api/account/create (no OAuth needed, just the key).
 3. Run the schema and grants, as a MySQL admin, against markgrace's database
-   (`otbdesig_wp298`):
+   (`otbdesig_wp298`). On a fresh install `schema.sql` already includes
+   everything; on an existing install, also run the numbered migrations for
+   whatever's new since your last deploy:
    ```
    mysql -u ADMIN -p otbdesig_wp298 < migrations/schema.sql
    mysql -u ADMIN -p otbdesig_wp298 < migrations/grants.sql
+   mysql -u ADMIN -p otbdesig_wp298 < migrations/migrate-002-wantlist-genres.sql
+   mysql -u ADMIN -p otbdesig_wp298 < migrations/migrate-003-lastfm-and-collection-rating.sql
    ```
+   Raw `GRANT` statements don't work on cPanel accounts without GRANT
+   privilege (common on shared hosting) — if `grants.sql` errors with
+   "GRANT command denied", set the equivalent privileges through cPanel's
+   **MySQL® Databases** UI instead (whole-database SELECT/INSERT/UPDATE for
+   `otbdesig_gracey`, plus DELETE for the wantlist-remove/collection-move
+   actions; SELECT/INSERT/UPDATE/DELETE for `otbdesig_harper`).
 4. Deploy this directory to `/pizzaparty` under the licoricepizzareviews.com
    docroot. Being a real subdirectory, WordPress's rewrite rules
    (`RewriteCond %{REQUEST_FILENAME} !-d`) leave it alone.

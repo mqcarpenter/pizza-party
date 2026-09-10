@@ -40,14 +40,14 @@ try {
         $releases = $json['releases'] ?? [];
         $st = $pdo->prepare(
             'INSERT INTO pizzaparty_collection_items
-                (release_id, instance_id, folder_id, artist, title, year, format, label, genres, styles, thumb_url, notes, date_added, raw_json)
-             VALUES (:release_id, :instance_id, :folder_id, :artist, :title, :year, :format, :label, :genres, :styles, :thumb_url, :notes, :date_added, :raw_json)
+                (release_id, instance_id, folder_id, artist, title, year, format, label, genres, styles, thumb_url, notes, rating, date_added, raw_json)
+             VALUES (:release_id, :instance_id, :folder_id, :artist, :title, :year, :format, :label, :genres, :styles, :thumb_url, :notes, :rating, :date_added, :raw_json)
              ON DUPLICATE KEY UPDATE
                 release_id = VALUES(release_id), folder_id = VALUES(folder_id),
                 artist = VALUES(artist), title = VALUES(title), year = VALUES(year),
                 format = VALUES(format), label = VALUES(label), genres = VALUES(genres),
                 styles = VALUES(styles), thumb_url = VALUES(thumb_url), notes = VALUES(notes),
-                date_added = VALUES(date_added), raw_json = VALUES(raw_json)'
+                rating = VALUES(rating), date_added = VALUES(date_added), raw_json = VALUES(raw_json)'
         );
 
         foreach ($releases as $r) {
@@ -71,6 +71,7 @@ try {
                 ':styles'      => implode(', ', $info['styles'] ?? []),
                 ':thumb_url'   => $info['thumb'] ?? null,
                 ':notes'       => implode('; ', array_filter($notesArr)) ?: null,
+                ':rating'      => !empty($r['rating']) ? (int)$r['rating'] : null,
                 ':date_added'  => !empty($r['date_added']) ? date('Y-m-d H:i:s', strtotime($r['date_added'])) : null,
                 ':raw_json'    => json_encode($r),
             ]);

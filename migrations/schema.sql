@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS pizzaparty_collection_items (
   styles       VARCHAR(255) DEFAULT NULL,
   thumb_url    VARCHAR(500) DEFAULT NULL,
   notes        TEXT         DEFAULT NULL,
+  rating       TINYINT UNSIGNED DEFAULT NULL,
   date_added   DATETIME     DEFAULT NULL,
   raw_json     LONGTEXT     DEFAULT NULL,
   updated_at   TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -85,4 +86,15 @@ CREATE TABLE IF NOT EXISTS pizzaparty_sync_state (
   last_synced_at  DATETIME     NOT NULL,
   status          VARCHAR(32)  NOT NULL,
   detail          VARCHAR(500) DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Caches Last.fm API responses (album info, similar artists, top albums) so
+-- a "Details" expand only ever hits Last.fm's API once per (method, args)
+-- combination — every repeat view/expand reads this table instead.
+CREATE TABLE IF NOT EXISTS pizzaparty_lastfm_cache (
+  id          INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  cache_key   VARCHAR(255) NOT NULL,
+  payload     LONGTEXT     NOT NULL,
+  fetched_at  DATETIME     NOT NULL,
+  UNIQUE KEY uniq_cache_key (cache_key)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -20,6 +20,8 @@ GRANT SELECT, INSERT, UPDATE ON otbdesig_wp298.pizzaparty_discogs_auth      TO '
 GRANT SELECT, INSERT         ON otbdesig_wp298.pizzaparty_devices          TO 'otbdesig_gracey'@'localhost';
 GRANT UPDATE (sign_count, last_used_at) ON otbdesig_wp298.pizzaparty_devices TO 'otbdesig_gracey'@'localhost';
 GRANT SELECT                 ON otbdesig_wp298.pizzaparty_sync_state       TO 'otbdesig_gracey'@'localhost';
+-- Last.fm cache is an upsert (ON DUPLICATE KEY UPDATE), so no DELETE needed.
+GRANT SELECT, INSERT, UPDATE ON otbdesig_wp298.pizzaparty_lastfm_cache      TO 'otbdesig_gracey'@'localhost';
 
 -- The sync job (cron, CLI only) needs full read/write on the cache tables
 -- and the ability to record its own runs and store/rotate the OAuth token.

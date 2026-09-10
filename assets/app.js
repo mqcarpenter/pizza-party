@@ -8,6 +8,7 @@
   var tab = 'collection';           // 'collection' | 'wantlist' | 'stats'
   var query = '';
   var view = 'list';                // 'list' | 'grid'
+  var sortBy = 'artist';            // 'artist' | 'year' | 'title'
   var genre = 'all';
   var devices = 0, writeWindow = 0, windowTimer = null;
   var list  = document.getElementById('list');
@@ -251,6 +252,15 @@
     });
   }
 
+  function starRow(item, isWant) {
+    var rating = item.rating || 0;
+    var stars = '';
+    for (var i = 1; i <= 5; i++) {
+      stars += '<button class="star' + (i <= rating ? ' filled' : '') + '" type="button" data-i="' + i + '" aria-label="Rate ' + i + '">&#9733;</button>';
+    }
+    return '<div class="stars" data-id="' + item.releaseId + '" data-instance="' + (item.instanceId || '') + '" data-want="' + (isWant ? '1' : '0') + '">' + stars + '</div>';
+  }
+
   function itemCard(item, isWant) {
     var thumb = item.thumb
       ? '<img class="thumb" src="' + esc(item.thumb) + '" alt="" loading="lazy">'
@@ -258,18 +268,26 @@
     var meta = [item.year, item.format, item.label].filter(Boolean).join(' · ');
     var notes = item.notes ? '<div class="notes">' + esc(item.notes) + '</div>' : '';
     var actions = isWant
-      ? '<button class="remove" data-id="' + item.releaseId + '" type="button">Remove</button>'
+      ? '<button class="own" data-id="' + item.releaseId + '" type="button">Add to Collection</button>' +
+        '<button class="remove" data-id="' + item.releaseId + '" type="button">Remove</button>'
       : '';
     return (
-      '<li class="card" data-id="' + item.releaseId + '">' +
-        thumb +
-        '<div class="body">' +
-          '<div class="artist">' + esc(item.artist || 'Unknown artist') + '</div>' +
-          '<div class="title">' + esc(item.title || 'Untitled') + '</div>' +
-          '<div class="meta">' + esc(meta) + '</div>' +
-          notes +
+      '<li class="card" data-id="' + item.releaseId + '" data-artist="' + esc(item.artist || '') + '" data-title="' + esc(item.title || '') + '">' +
+        '<div class="card-main">' +
+          thumb +
+          '<div class="body">' +
+            '<div class="artist">' + esc(item.artist || 'Unknown artist') + '</div>' +
+            '<div class="title">' + esc(item.title || 'Untitled') + '</div>' +
+            '<div class="meta">' + esc(meta) + '</div>' +
+            starRow(item, isWant) +
+            notes +
+          '</div>' +
+          '<div class="actions">' +
+            actions +
+            '<button class="expand" type="button" aria-expanded="false">Details &#9662;</button>' +
+          '</div>' +
         '</div>' +
-        '<div class="actions">' + actions + '</div>' +
+        '<div class="details-panel hide"></div>' +
       '</li>'
     );
   }
@@ -308,8 +326,17 @@
     wrap.innerHTML = html;
   }
 
+  function sortItems(data) {
+    return data.slice().sort(function (a, b) {
+      if (sortBy === 'year') return (a.year || 0) - (b.year || 0) || (a.artist || '').localeCompare(b.artist || '');
+      if (sortBy === 'title') return (a.title || '').localeCompare(b.title || '');
+      return (a.artist || '').localeCompare(b.artist || '') || (a.year || 0) - (b.year || 0);
+    });
+  }
+
   function render() {
     document.getElementById('searchrow').classList.toggle('hide', tab === 'stats');
+    document.getElementById('sortrow').classList.toggle('hide', tab === 'stats');
     document.getElementById('stats').classList.toggle('hide', tab !== 'stats');
     if (tab === 'stats') {
       list.innerHTML = '';
@@ -321,7 +348,7 @@
 
     var full = (tab === 'collection' ? COLLECTION : WANTLIST);
     buildGenreChips(full);
-    var data = full.filter(matches);
+    var data = sortItems(full.filter(matches));
     list.className = view === 'grid' ? 'grid' : '';
     if (!data.length) {
       list.innerHTML = '';
@@ -347,13 +374,15 @@
       .slice(0, max);
     if (!top.length) return '<p class="stats-empty">No data yet.</p>';
     var peak = top[0][1];
-    return top.map(function (row) {
+    return top.map(function (row, i) {
       var pct = Math.max(4, Math.round((row[1] / peak) * 100));
+      var rankCls = i < 3 ? ' rank-' + (i + 1) : '';
       return (
         '<div class="barchart-row">' +
+          '<div class="barchart-rank' + rankCls + '">' + (i + 1) + '</div>' +
           '<div class="barchart-label">' + esc(row[0]) + '</div>' +
           '<div class="barchart-track">' +
-            '<div class="barchart-fill" style="width:' + pct + '%"></div>' +
+            '<div class="barchart-fill' + rankCls + '" style="width:' + pct + '%"></div>' +
           '</div>' +
           '<div class="barchart-value">' + row[1] + '</div>' +
         '</div>'
@@ -361,36 +390,188 @@
     }).join('');
   }
 
+  function statTile(value, label) {
+    return (
+      '<div class="tile-stat">' +
+        '<svg class="tile-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10.5"/><circle class="groove" cx="12" cy="12" r="7.2"/><circle class="hole" cx="12" cy="12" r="1.6"/></svg>' +
+        '<div class="tile-value">' + value + '</div>' +
+        '<div class="tile-label">' + label + '</div>' +
+      '</div>'
+    );
+  }
+
   function renderStats() {
-    var genreCounts = {}, artistCounts = {};
+    var genreCounts = {}, artistCounts = {}, decadeCounts = {};
     COLLECTION.forEach(function (item) {
       itemGenres(item).forEach(function (g) { genreCounts[g] = (genreCounts[g] || 0) + 1; });
       var a = item.artist || 'Unknown artist';
       artistCounts[a] = (artistCounts[a] || 0) + 1;
+      if (item.year) {
+        var decade = Math.floor(item.year / 10) * 10 + 's';
+        decadeCounts[decade] = (decadeCounts[decade] || 0) + 1;
+      }
     });
+
+    var topDecade = Object.keys(decadeCounts).sort(function (a, b) {
+      return decadeCounts[b] - decadeCounts[a];
+    })[0] || '—';
+
+    document.getElementById('statTiles').innerHTML =
+      statTile(COLLECTION.length.toLocaleString(), 'Records') +
+      statTile(Object.keys(artistCounts).length.toLocaleString(), 'Artists') +
+      statTile(Object.keys(genreCounts).length.toLocaleString(), 'Genres') +
+      statTile(topDecade, 'Favorite era');
+
     document.getElementById('genreChart').innerHTML = barChart(genreCounts, 12);
     document.getElementById('artistChart').innerHTML = barChart(artistCounts, 12);
   }
 
   list.addEventListener('click', async function (e) {
-    var btn = e.target.closest('.remove');
-    if (!btn) return;
-    var id = parseInt(btn.dataset.id, 10);
-    if (!confirm('Remove this from your wantlist?')) return;
-    btn.disabled = true;
-    try {
-      await gatedPost('wantlist-remove', { releaseId: id });
-      WANTLIST = WANTLIST.filter(function (i) { return i.releaseId !== id; });
-      render();
-      say('Removed.');
-    } catch (e2) {
-      btn.disabled = false;
-      if (e2.message !== 'locked' && e2.code !== 'passkey_required') say('Not removed: ' + e2.message, true);
+    var removeBtn = e.target.closest('.remove');
+    var ownBtn = e.target.closest('.own');
+    if (removeBtn) {
+      var id = parseInt(removeBtn.dataset.id, 10);
+      if (!confirm('Remove this from your wantlist?')) return;
+      removeBtn.disabled = true;
+      try {
+        await gatedPost('wantlist-remove', { releaseId: id });
+        WANTLIST = WANTLIST.filter(function (i) { return i.releaseId !== id; });
+        render();
+        say('Removed.');
+      } catch (e2) {
+        removeBtn.disabled = false;
+        if (e2.message !== 'locked' && e2.code !== 'passkey_required') say('Not removed: ' + e2.message, true);
+      }
+      return;
+    }
+    if (ownBtn) {
+      var wid = parseInt(ownBtn.dataset.id, 10);
+      if (!confirm('Move this from your wantlist into your collection?')) return;
+      ownBtn.disabled = true;
+      try {
+        var d = await gatedPost('wantlist-to-collection', { releaseId: wid });
+        WANTLIST = WANTLIST.filter(function (i) { return i.releaseId !== wid; });
+        if (d && d.item) COLLECTION.push(d.item);
+        render();
+        say('Added to your collection.');
+      } catch (e2) {
+        ownBtn.disabled = false;
+        if (e2.message !== 'locked' && e2.code !== 'passkey_required') say('Not added: ' + e2.message, true);
+      }
+      return;
+    }
+
+    var star = e.target.closest('.star');
+    if (star) {
+      var starsWrap = star.closest('.stars');
+      var value = parseInt(star.dataset.i, 10);
+      var current = starsWrap.querySelectorAll('.star.filled').length;
+      var next = value === current ? 0 : value; // tap the lit star again to clear
+      var rid = parseInt(starsWrap.dataset.id, 10);
+      var isW = starsWrap.dataset.want === '1';
+      [].forEach.call(starsWrap.querySelectorAll('.star'), function (s, idx) {
+        s.classList.toggle('filled', idx < next);
+      });
+      try {
+        if (isW) {
+          await gatedPost('wantlist-note', { releaseId: rid, rating: next });
+          var wi = WANTLIST.find(function (i) { return i.releaseId === rid; });
+          if (wi) wi.rating = next || null;
+        } else {
+          var instanceId = parseInt(starsWrap.dataset.instance, 10);
+          await gatedPost('collection-rate', { instanceId: instanceId, rating: next });
+          var ci = COLLECTION.find(function (i) { return i.releaseId === rid; });
+          if (ci) ci.rating = next || null;
+        }
+      } catch (e3) {
+        [].forEach.call(starsWrap.querySelectorAll('.star'), function (s, idx) {
+          s.classList.toggle('filled', idx < current);
+        });
+        if (e3.message !== 'locked' && e3.code !== 'passkey_required') say('Could not save rating: ' + e3.message, true);
+      }
+      return;
+    }
+
+    var expandBtn = e.target.closest('.expand');
+    if (expandBtn) {
+      var card = expandBtn.closest('.card');
+      var panel = card.querySelector('.details-panel');
+      var opening = panel.classList.contains('hide');
+      panel.classList.toggle('hide', !opening);
+      expandBtn.setAttribute('aria-expanded', opening ? 'true' : 'false');
+      if (opening && !panel.dataset.loaded) {
+        panel.dataset.loaded = '1';
+        await loadDetails(panel, card.dataset.artist, card.dataset.title);
+      }
+      return;
     }
   });
 
+  /* ---------- Last.fm details panel ----------
+     Lazy-loaded on first expand, cached per (artist,title) for the rest of
+     the session so re-toggling a panel never re-fetches. */
+  var lastfmCache = {};
+
+  async function loadDetails(panel, artist, title) {
+    panel.innerHTML = '<p class="details-loading">Loading Last.fm details&hellip;</p>';
+    var key = artist + '|' + title;
+    try {
+      var data = lastfmCache[key];
+      if (!data) {
+        data = await api('?action=lastfm-detail&artist=' + encodeURIComponent(artist) + '&title=' + encodeURIComponent(title));
+        lastfmCache[key] = data;
+      }
+      panel.innerHTML = renderDetails(data);
+    } catch (e) {
+      panel.innerHTML = '<p class="details-loading">Could not load Last.fm details: ' + esc(e.message) + '</p>';
+    }
+  }
+
+  function renderDetails(data) {
+    var album = data.album;
+    var html = '';
+    if (album) {
+      var stats = [];
+      if (album.listeners != null) stats.push(album.listeners.toLocaleString() + ' listeners');
+      if (album.playcount != null) stats.push(album.playcount.toLocaleString() + ' plays');
+      html += '<div class="details-stats">' + esc(stats.join(' · ')) + '</div>';
+      if (album.tags && album.tags.length) {
+        html += '<div class="details-tags">' + album.tags.map(function (t) {
+          return '<span class="tagchip">' + esc(t) + '</span>';
+        }).join('') + '</div>';
+      }
+      if (album.summary) {
+        html += '<p class="details-summary">' + esc(album.summary) + '</p>';
+      }
+      if (album.url) {
+        html += '<a class="details-link" href="' + esc(album.url) + '" target="_blank" rel="noopener">View on Last.fm &#8599;</a>';
+      }
+    }
+    if (data.similarArtists && data.similarArtists.length) {
+      html += '<div class="details-heading">Similar artists</div>';
+      html += '<div class="details-tags">' + data.similarArtists.map(function (a) {
+        return a.url
+          ? '<a class="tagchip link" href="' + esc(a.url) + '" target="_blank" rel="noopener">' + esc(a.name) + '</a>'
+          : '<span class="tagchip">' + esc(a.name) + '</span>';
+      }).join('') + '</div>';
+    }
+    if (data.similarAlbums && data.similarAlbums.length) {
+      html += '<div class="details-heading">In a similar style</div>';
+      html += '<ul class="details-albums">' + data.similarAlbums.map(function (al) {
+        var label = esc(al.artist) + ' — ' + esc(al.title);
+        return '<li>' + (al.url ? '<a href="' + esc(al.url) + '" target="_blank" rel="noopener">' + label + '</a>' : label) + '</li>';
+      }).join('') + '</ul>';
+    }
+    return html || '<p class="details-loading">No Last.fm data found for this release.</p>';
+  }
+
   document.getElementById('q').addEventListener('input', function (e) {
     query = e.target.value;
+    render();
+  });
+
+  document.getElementById('sortSelect').addEventListener('change', function (e) {
+    sortBy = e.target.value;
     render();
   });
 
