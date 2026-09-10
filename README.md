@@ -59,11 +59,14 @@ the `markgrace` card tracker.
    device — from then on, wantlist edits need Face ID from that phone.
 8. "Add to Home Screen" in Safari to install it as a standalone app.
 
-## Icons
+## Branding
 
-`icons/*.png` are placeholder glyphs generated locally — swap them for real
-branded artwork before shipping (same sizes: 192, 512, 512 maskable, 180
-apple-touch-icon).
+Colors and the app icon/header mark are derived from licoricepizzareviews.com's
+own logo (`assets/logo.png`, `icons/*.png`) — an amber/gold vinyl-record mark.
+`--accent` in `assets/app.css` is a darkened version of the logo's brightest
+orange so white button text clears WCAG AA contrast; `--accent-bright` carries
+the true logo color for decorative surfaces (gradients, chart fills) where no
+text sits directly on it.
 
 ## Not yet built (phase 2)
 

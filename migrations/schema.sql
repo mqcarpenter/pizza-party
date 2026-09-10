@@ -53,6 +53,8 @@ CREATE TABLE IF NOT EXISTS pizzaparty_wantlist_items (
   year         SMALLINT     DEFAULT NULL,
   format       VARCHAR(255) DEFAULT NULL,
   label        VARCHAR(255) DEFAULT NULL,
+  genres       VARCHAR(255) DEFAULT NULL,
+  styles       VARCHAR(255) DEFAULT NULL,
   thumb_url    VARCHAR(500) DEFAULT NULL,
   notes        TEXT         DEFAULT NULL,
   rating       TINYINT UNSIGNED DEFAULT NULL,

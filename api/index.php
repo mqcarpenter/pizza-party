@@ -280,6 +280,8 @@ function row_to_item(array $r, bool $isWant = false): array {
         'year'      => $r['year'] !== null ? (int)$r['year'] : null,
         'format'    => $r['format'],
         'label'     => $r['label'],
+        'genres'    => $r['genres'],
+        'styles'    => $r['styles'],
         'thumb'     => $r['thumb_url'],
         'notes'     => $r['notes'],
         'dateAdded' => $r['date_added'],
@@ -288,8 +290,6 @@ function row_to_item(array $r, bool $isWant = false): array {
         $out['rating'] = $r['rating'] !== null ? (int)$r['rating'] : null;
     } else {
         $out['instanceId'] = (int)$r['instance_id'];
-        $out['genres'] = $r['genres'];
-        $out['styles'] = $r['styles'];
     }
     return $out;
 }
@@ -306,7 +306,7 @@ if ($method === 'GET' && $action === 'collection') {
 if ($method === 'GET' && $action === 'wantlist') {
     require_unlocked();
     $rows = db()->query(
-        'SELECT release_id, artist, title, year, format, label, thumb_url, notes, rating, date_added
+        'SELECT release_id, artist, title, year, format, label, genres, styles, thumb_url, notes, rating, date_added
            FROM pizzaparty_wantlist_items ORDER BY artist ASC, year ASC'
     )->fetchAll();
     out(['items' => array_map(fn($r) => row_to_item($r, true), $rows)]);
@@ -342,8 +342,8 @@ if ($method === 'POST' && $action === 'wantlist-add') {
 
     $st = db()->prepare(
         'INSERT INTO pizzaparty_wantlist_items
-            (release_id, artist, title, year, format, label, thumb_url, notes, rating, date_added, raw_json)
-         VALUES (:release_id, :artist, :title, :year, :format, :label, :thumb_url, :notes, :rating, NOW(), :raw_json)
+            (release_id, artist, title, year, format, label, genres, styles, thumb_url, notes, rating, date_added, raw_json)
+         VALUES (:release_id, :artist, :title, :year, :format, :label, :genres, :styles, :thumb_url, :notes, :rating, NOW(), :raw_json)
          ON DUPLICATE KEY UPDATE
             notes = VALUES(notes), rating = VALUES(rating), raw_json = VALUES(raw_json)'
     );
@@ -354,6 +354,8 @@ if ($method === 'POST' && $action === 'wantlist-add') {
         ':year'       => $info['year'] ?? null,
         ':format'     => implode(', ', array_filter($formats)),
         ':label'      => implode(', ', array_filter($labels)),
+        ':genres'     => implode(', ', $info['genres'] ?? []),
+        ':styles'     => implode(', ', $info['styles'] ?? []),
         ':thumb_url'  => $info['thumb'] ?? null,
         ':notes'      => $json['notes'] ?? ($params['notes'] ?? null),
         ':rating'     => $json['rating'] ?? ($params['rating'] ?? null),

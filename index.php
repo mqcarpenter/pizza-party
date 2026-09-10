@@ -33,11 +33,14 @@
 <div id="app" class="hide">
 
   <div class="masthead">
-    <div class="wrap">
-      <span class="brandline"><span class="dot"></span>Discogs collection &amp; wantlist</span>
-      <h1>Pizza Party
-        <span class="thin">Your records, everywhere</span>
-      </h1>
+    <div class="wrap row">
+      <img class="logo" src="assets/logo.png" alt="" width="44" height="44">
+      <div>
+        <span class="brandline"><span class="dot"></span>licoricepizzareviews.com</span>
+        <h1>Pizza Party
+          <span class="thin">Your records, everywhere</span>
+        </h1>
+      </div>
     </div>
   </div>
 
@@ -52,17 +55,24 @@
       <div class="tabs" id="tabs" role="tablist">
         <button class="tab" type="button" data-tab="collection" aria-selected="true">Collection</button>
         <button class="tab" type="button" data-tab="wantlist" aria-selected="false">Wantlist</button>
+        <button class="tab" type="button" data-tab="stats" aria-selected="false">Stats</button>
       </div>
 
-      <div class="searchrow">
+      <div class="searchrow" id="searchrow">
         <div class="searchwrap">
           <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <circle cx="9" cy="9" r="6"/><path d="M13.5 13.5L18 18" stroke-linecap="round"/>
           </svg>
           <input class="search" id="q" type="search" placeholder="Search artist, title, label&hellip;" autocomplete="off">
         </div>
+        <div class="chips viewchips" id="viewToggle" role="group" aria-label="View">
+          <button class="chip" type="button" data-v="list" aria-pressed="true" title="List view">List</button>
+          <button class="chip" type="button" data-v="grid" aria-pressed="false" title="Grid view">Grid</button>
+        </div>
         <button class="lock open" id="lockBtn" type="button">&mdash;</button>
       </div>
+
+      <div class="chips genrechips hide" id="genreChips"></div>
 
       <form class="addrow hide" id="addForm">
         <input class="addinput" id="addReleaseId" type="text" inputmode="numeric"
@@ -75,6 +85,19 @@
 
     <main id="list"></main>
     <div class="empty hide" id="empty">Nothing here yet.</div>
+
+    <div class="stats hide" id="stats">
+      <section class="stats-section">
+        <h2>By genre</h2>
+        <p class="stats-sub">Concentration of your collection by genre.</p>
+        <div class="barchart" id="genreChart"></div>
+      </section>
+      <section class="stats-section">
+        <h2>By artist</h2>
+        <p class="stats-sub">Your most-represented artists.</p>
+        <div class="barchart" id="artistChart"></div>
+      </section>
+    </div>
 
     <footer>
       <div id="syncNote">&nbsp;</div>

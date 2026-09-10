@@ -5,8 +5,10 @@
   var API = 'api/';
   var COLLECTION = [];
   var WANTLIST = [];
-  var tab = 'collection';           // 'collection' | 'wantlist'
+  var tab = 'collection';           // 'collection' | 'wantlist' | 'stats'
   var query = '';
+  var view = 'list';                // 'list' | 'grid'
+  var genre = 'all';
   var devices = 0, writeWindow = 0, windowTimer = null;
   var list  = document.getElementById('list');
   var empty = document.getElementById('empty');
@@ -236,7 +238,12 @@
 
   /* ---------- rendering ---------- */
 
+  function itemGenres(item) {
+    return (item.genres || '').split(',').map(function (g) { return g.trim(); }).filter(Boolean);
+  }
+
   function matches(item) {
+    if (genre !== 'all' && itemGenres(item).indexOf(genre) === -1) return false;
     if (!query) return true;
     var q = query.toLowerCase();
     return [item.artist, item.title, item.label, item.format].some(function (f) {
@@ -267,15 +274,102 @@
     );
   }
 
+  function gridTile(item) {
+    var thumb = item.thumb
+      ? '<img class="thumb" src="' + esc(item.thumb) + '" alt="" loading="lazy">'
+      : '<div class="thumb placeholder"></div>';
+    var caption = esc(item.artist || 'Unknown artist') + ' — ' + esc(item.title || 'Untitled');
+    return (
+      '<li class="tile" data-id="' + item.releaseId + '" title="' + caption + '">' +
+        thumb +
+      '</li>'
+    );
+  }
+
+  function buildGenreChips(data) {
+    var wrap = document.getElementById('genreChips');
+    var counts = {};
+    data.forEach(function (item) {
+      itemGenres(item).forEach(function (g) { counts[g] = (counts[g] || 0) + 1; });
+    });
+    var genres = Object.keys(counts).sort(function (a, b) { return counts[b] - counts[a]; });
+    if (!genres.length) {
+      wrap.classList.add('hide');
+      wrap.innerHTML = '';
+      return;
+    }
+    if (genre !== 'all' && !counts[genre]) genre = 'all';
+    wrap.classList.remove('hide');
+    var html = '<button class="chip" type="button" data-g="all" aria-pressed="' + (genre === 'all') + '">All</button>';
+    genres.forEach(function (g) {
+      html += '<button class="chip" type="button" data-g="' + esc(g) + '" aria-pressed="' + (genre === g) + '">' +
+              esc(g) + ' <span class="chipcount">' + counts[g] + '</span></button>';
+    });
+    wrap.innerHTML = html;
+  }
+
   function render() {
-    var data = (tab === 'collection' ? COLLECTION : WANTLIST).filter(matches);
+    document.getElementById('searchrow').classList.toggle('hide', tab === 'stats');
+    document.getElementById('stats').classList.toggle('hide', tab !== 'stats');
+    if (tab === 'stats') {
+      list.innerHTML = '';
+      empty.classList.add('hide');
+      document.getElementById('genreChips').classList.add('hide');
+      renderStats();
+      return;
+    }
+
+    var full = (tab === 'collection' ? COLLECTION : WANTLIST);
+    buildGenreChips(full);
+    var data = full.filter(matches);
+    list.className = view === 'grid' ? 'grid' : '';
     if (!data.length) {
       list.innerHTML = '';
       empty.classList.remove('hide');
       return;
     }
     empty.classList.add('hide');
-    list.innerHTML = data.map(function (item) { return itemCard(item, tab === 'wantlist'); }).join('');
+    list.innerHTML = view === 'grid'
+      ? data.map(gridTile).join('')
+      : data.map(function (item) { return itemCard(item, tab === 'wantlist'); }).join('');
+  }
+
+  /* ---------- stats dashboard ----------
+     Single-series magnitude bars (count by genre / count by artist) — one
+     hue, no legend needed, sorted descending, capped so it stays readable
+     on a phone. Built from the Collection cache: "concentration in style"
+     means what you actually own. */
+
+  function barChart(counts, max) {
+    var top = Object.keys(counts)
+      .map(function (k) { return [k, counts[k]]; })
+      .sort(function (a, b) { return b[1] - a[1]; })
+      .slice(0, max);
+    if (!top.length) return '<p class="stats-empty">No data yet.</p>';
+    var peak = top[0][1];
+    return top.map(function (row) {
+      var pct = Math.max(4, Math.round((row[1] / peak) * 100));
+      return (
+        '<div class="barchart-row">' +
+          '<div class="barchart-label">' + esc(row[0]) + '</div>' +
+          '<div class="barchart-track">' +
+            '<div class="barchart-fill" style="width:' + pct + '%"></div>' +
+          '</div>' +
+          '<div class="barchart-value">' + row[1] + '</div>' +
+        '</div>'
+      );
+    }).join('');
+  }
+
+  function renderStats() {
+    var genreCounts = {}, artistCounts = {};
+    COLLECTION.forEach(function (item) {
+      itemGenres(item).forEach(function (g) { genreCounts[g] = (genreCounts[g] || 0) + 1; });
+      var a = item.artist || 'Unknown artist';
+      artistCounts[a] = (artistCounts[a] || 0) + 1;
+    });
+    document.getElementById('genreChart').innerHTML = barChart(genreCounts, 12);
+    document.getElementById('artistChart').innerHTML = barChart(artistCounts, 12);
   }
 
   list.addEventListener('click', async function (e) {
@@ -304,11 +398,30 @@
     var b = e.target.closest('.tab');
     if (!b) return;
     tab = b.dataset.tab;
+    genre = 'all';
     [].forEach.call(this.querySelectorAll('.tab'), function (t) {
       t.setAttribute('aria-selected', t === b ? 'true' : 'false');
     });
     document.getElementById('addForm').classList.toggle('hide', tab !== 'wantlist');
     document.getElementById('addHint').classList.toggle('hide', tab !== 'wantlist');
+    render();
+  });
+
+  document.getElementById('genreChips').addEventListener('click', function (e) {
+    var b = e.target.closest('.chip');
+    if (!b) return;
+    genre = b.dataset.g;
+    render();
+  });
+
+  document.getElementById('viewToggle').addEventListener('click', function (e) {
+    var b = e.target.closest('.chip');
+    if (!b) return;
+    view = b.dataset.v;
+    [].forEach.call(this.querySelectorAll('.chip'), function (c) {
+      c.setAttribute('aria-pressed', c === b ? 'true' : 'false');
+    });
+    try { localStorage.setItem('pizzaparty.view', view); } catch (ex) {}
     render();
   });
 
@@ -399,6 +512,15 @@
     try {
       var t = localStorage.getItem('pizzaparty.theme');
       if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+    } catch (e) {}
+    try {
+      var v = localStorage.getItem('pizzaparty.view');
+      if (v === 'grid' || v === 'list') {
+        view = v;
+        [].forEach.call(document.querySelectorAll('#viewToggle .chip'), function (c) {
+          c.setAttribute('aria-pressed', c.dataset.v === view ? 'true' : 'false');
+        });
+      }
     } catch (e) {}
     try {
       var s = await api('?action=session');

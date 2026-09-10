@@ -43,11 +43,12 @@ try {
         $wants = $json['wants'] ?? [];
         $st = $pdo->prepare(
             'INSERT INTO pizzaparty_wantlist_items
-                (release_id, artist, title, year, format, label, thumb_url, notes, rating, date_added, raw_json)
-             VALUES (:release_id, :artist, :title, :year, :format, :label, :thumb_url, :notes, :rating, :date_added, :raw_json)
+                (release_id, artist, title, year, format, label, genres, styles, thumb_url, notes, rating, date_added, raw_json)
+             VALUES (:release_id, :artist, :title, :year, :format, :label, :genres, :styles, :thumb_url, :notes, :rating, :date_added, :raw_json)
              ON DUPLICATE KEY UPDATE
                 artist = VALUES(artist), title = VALUES(title), year = VALUES(year),
-                format = VALUES(format), label = VALUES(label), thumb_url = VALUES(thumb_url),
+                format = VALUES(format), label = VALUES(label), genres = VALUES(genres),
+                styles = VALUES(styles), thumb_url = VALUES(thumb_url),
                 notes = VALUES(notes), rating = VALUES(rating), date_added = VALUES(date_added),
                 raw_json = VALUES(raw_json)'
         );
@@ -66,6 +67,8 @@ try {
                 ':year'        => $info['year'] ?? null,
                 ':format'      => implode(', ', array_filter($formats)),
                 ':label'       => implode(', ', array_filter($labels)),
+                ':genres'      => implode(', ', $info['genres'] ?? []),
+                ':styles'      => implode(', ', $info['styles'] ?? []),
                 ':thumb_url'   => $info['thumb'] ?? null,
                 ':notes'       => $w['notes'] ?? null,
                 ':rating'      => $w['rating'] ?? null,
