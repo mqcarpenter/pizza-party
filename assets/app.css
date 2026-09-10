@@ -272,6 +272,7 @@ body {
 .details-albums a { color: var(--ink); text-decoration: none; }
 .details-albums a:hover { color: var(--accent); }
 .viatag { color: var(--muted); font-size: 11px; }
+.pressing-meta { color: var(--muted); font-size: 11px; margin-top: 2px; }
 
 .empty { text-align: center; color: var(--muted); padding: 40px 0; }
 

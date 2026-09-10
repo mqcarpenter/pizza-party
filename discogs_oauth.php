@@ -234,7 +234,10 @@ function discogs_resolve_cache_put(string $key, ?array $payload): void {
  * "similar album" suggestion and that data almost never changes.
  */
 function discogs_resolve_release(string $artist, string $title): ?array {
-    $key = 'resolve|' . strtolower($artist . '|' . $title);
+    // v2: added year/country/medianPrice. Bumped so rows cached under the
+    // old shape (before this release) miss and refetch instead of serving
+    // an incomplete cached value for up to DISCOGS_RESOLVE_CACHE_TTL_DAYS.
+    $key = 'resolve|v2|' . strtolower($artist . '|' . $title);
     // A cache miss and a cached "no match" both decode to null here, so an
     // unresolvable title gets retried against Discogs once per TTL window
     // rather than being remembered as permanently unresolvable — an
@@ -268,6 +271,54 @@ function discogs_resolve_release(string $artist, string $title): ?array {
             'thumb'     => $result['thumb'] ?? null,
             'year'      => $result['year'] ?? null,
         ];
+
+        // The search/master result's year is the master's, not necessarily
+        // this specific pressing's -- and carries no country or price at
+        // all. Worth a second call: this is the exact release we're about
+        // to let someone add to their wantlist, so "which pressing is
+        // this?" (year, country, going rate) is the whole point of
+        // resolving one in the first place, not a nice-to-have.
+        try {
+            [$rStatus, $rJson] = discogs_signed_request('GET', DISCOGS_API_BASE . '/releases/' . $releaseId);
+            if ($rStatus === 200) {
+                if (!empty($rJson['year'])) $resolved['year'] = $rJson['year'];
+                if (!empty($rJson['country'])) $resolved['country'] = $rJson['country'];
+            }
+        } catch (Throwable $e) {
+            error_log('discogs_resolve_release (release details): ' . $e->getMessage());
+        }
+
+        // Discogs has no single "median sale price" field; the closest real
+        // signal is its own price-suggestion tool, which returns a
+        // suggested price per condition grade. A median ACROSS those grades
+        // isn't a price anyone would actually pay, but it's a fair, honest
+        // single number to show at a glance -- computed from real values
+        // Discogs returned, not invented.
+        try {
+            [$pStatus, $pJson] = discogs_signed_request('GET',
+                DISCOGS_API_BASE . '/marketplace/price_suggestions/' . $releaseId);
+            if ($pStatus === 200 && is_array($pJson)) {
+                $values = [];
+                $currency = null;
+                foreach ($pJson as $grade) {
+                    if (!isset($grade['value'])) continue;
+                    $values[] = (float) $grade['value'];
+                    $currency = $currency ?? ($grade['currency'] ?? null);
+                }
+                if ($values) {
+                    sort($values);
+                    $mid = (int) floor((count($values) - 1) / 2);
+                    $median = count($values) % 2
+                        ? $values[$mid]
+                        : ($values[$mid] + $values[$mid + 1]) / 2;
+                    $resolved['medianPrice'] = round($median, 2);
+                    $resolved['priceCurrency'] = $currency ?? 'USD';
+                }
+            }
+        } catch (Throwable $e) {
+            error_log('discogs_resolve_release (price suggestions): ' . $e->getMessage());
+        }
+
         discogs_resolve_cache_put($key, $resolved);
         return $resolved;
     } catch (Throwable $e) {

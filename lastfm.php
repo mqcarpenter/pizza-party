@@ -163,9 +163,12 @@ function lastfm_detail(string $artist, string $title): array {
         foreach ($similarAlbums as &$sa) {
             $resolved = discogs_resolve_release($sa['artist'], $sa['title']);
             if ($resolved) {
-                $sa['releaseId'] = $resolved['releaseId'];
-                $sa['thumb']     = $resolved['thumb'];
-                $sa['year']      = $resolved['year'];
+                $sa['releaseId']     = $resolved['releaseId'];
+                $sa['thumb']         = $resolved['thumb'];
+                $sa['year']          = $resolved['year'];
+                $sa['country']       = $resolved['country'] ?? null;
+                $sa['medianPrice']   = $resolved['medianPrice'] ?? null;
+                $sa['priceCurrency'] = $resolved['priceCurrency'] ?? null;
             }
         }
         unset($sa);

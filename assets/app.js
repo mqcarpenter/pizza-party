@@ -600,6 +600,22 @@
         } else {
           link = label;
         }
+        // Which pressing this actually is, not just which album: the
+        // release we resolved (README: Discogs' own "main release" pick)
+        // is a specific year/country, and a median across Discogs' own
+        // per-condition price suggestions -- not a real sale price, but
+        // an honest single number computed from real values Discogs gave us.
+        var pressing = [];
+        if (al.releaseId) {
+          if (al.year) pressing.push(String(al.year));
+          if (al.country) pressing.push(esc(al.country));
+          if (al.medianPrice != null) {
+            var cur = al.priceCurrency || 'USD';
+            var amount = cur === 'USD' ? '$' + al.medianPrice.toFixed(2) : al.medianPrice.toFixed(2) + ' ' + esc(cur);
+            pressing.push('median ' + amount);
+          }
+        }
+        var meta = pressing.length ? '<div class="pressing-meta">' + pressing.join(' · ') + '</div>' : '';
         var already = al.releaseId && (
           WANTLIST.some(function (i) { return i.releaseId === al.releaseId; }) ||
           COLLECTION.some(function (i) { return i.releaseId === al.releaseId; })
@@ -609,7 +625,7 @@
               ? ' <span class="already">Already added</span>'
               : ' <button class="addsimilar" data-id="' + al.releaseId + '" type="button">Add</button>')
           : '';
-        return '<li>' + link + tag + action + '</li>';
+        return '<li>' + link + tag + action + meta + '</li>';
       }).join('') + '</ul>';
     }
     return html || '<p class="details-loading">No Last.fm data found for this release.</p>';
