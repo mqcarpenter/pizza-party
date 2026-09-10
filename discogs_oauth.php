@@ -147,11 +147,16 @@ function discogs_finish_connect(string $oauthToken, string $verifier): void {
         throw new RuntimeException('Could not confirm the Discogs account identity after connecting.');
     }
 
-    $pdo = db();
-    $pdo->exec('DELETE FROM pizzaparty_discogs_auth'); // single-row table
-    $st = $pdo->prepare(
-        'INSERT INTO pizzaparty_discogs_auth (discogs_username, access_token, access_token_secret, created_at)
-         VALUES (:u, :t, :s, NOW())'
+    // A fixed id keeps this a genuine upsert — no DELETE privilege required,
+    // which the web app's account (least-privilege) deliberately doesn't have.
+    $st = db()->prepare(
+        'INSERT INTO pizzaparty_discogs_auth (id, discogs_username, access_token, access_token_secret, created_at)
+         VALUES (1, :u, :t, :s, NOW())
+         ON DUPLICATE KEY UPDATE
+            discogs_username = VALUES(discogs_username),
+            access_token = VALUES(access_token),
+            access_token_secret = VALUES(access_token_secret),
+            updated_at = NOW()'
     );
     $st->execute([
         ':u' => $idJson['username'],
