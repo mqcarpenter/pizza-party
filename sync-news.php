@@ -8,7 +8,7 @@ require __DIR__ . '/news.php';
  * Refreshes the News tab's feed for every ARTIST WORTH TRACKING (see
  * significant_artists() in db.php -- two-plus records between collection
  * and wantlist combined): new-release detection (MusicBrainz) and recent
- * coverage (Google News RSS). Run from cron, e.g. every 6 hours:
+ * coverage (Bing News RSS). Run from cron, e.g. every 6 hours:
  *   php /path/to/pizzaparty/sync-news.php
  *
  * Narrowed on purpose: a full collection's worth of one-off artists (owned
@@ -42,16 +42,6 @@ $insertNewsSt = $pdo->prepare(
         headline = VALUES(headline), excerpt = VALUES(excerpt), image_url = VALUES(image_url),
         source = VALUES(source), published_at = VALUES(published_at), fetched_at = VALUES(fetched_at)'
 );
-// Was this exact article already enriched on a previous run? Keyed on
-// (artist, headline) rather than url, since the stored url is the
-// resolved publisher link (see below) while the RSS feed keeps handing
-// back the same Google redirect link for it every time.
-$enrichedSt = $pdo->prepare(
-    'SELECT url, excerpt, image_url FROM pizzaparty_news_items
-      WHERE artist = :artist AND headline = :headline
-        AND (excerpt IS NOT NULL OR image_url IS NOT NULL)
-      LIMIT 1'
-);
 
 $errors = 0;
 $newItems = 0;
@@ -74,38 +64,17 @@ foreach ($artists as $rawArtist) {
 
         $releaseNews = $mbid ? musicbrainz_new_releases($pdo, $artistKey, $mbid) : [];
 
-        // ---- Google News: a handful of recent articles ----
-        $articleNews = googlenews_fetch((string)$rawArtist);
+        // ---- Bing News: a handful of recent articles, excerpt+image included ----
+        $articleNews = bingnews_fetch((string)$rawArtist);
 
         foreach (array_merge($releaseNews, $articleNews) as $item) {
-            $headline = mb_substr($item['headline'], 0, 500);
             $url = $item['url'];
-            $excerpt = null;
-            $image = null;
-
-            if (($item['kind'] ?? 'article') === 'article') {
-                $enrichedSt->execute([':artist' => $rawArtist, ':headline' => $headline]);
-                $prior = $enrichedSt->fetch();
-                if ($prior) {
-                    // Already fetched this exact article before -- reuse it
-                    // rather than hitting the publisher's site again.
-                    $url = $prior['url'];
-                    $excerpt = $prior['excerpt'];
-                    $image = $prior['image_url'];
-                } else {
-                    $og = article_og_meta($item['url']);
-                    $url = $og['url'] ?: $item['url'];
-                    $excerpt = $og['excerpt'];
-                    $image = $og['image'];
-                }
-            }
-
             $insertNewsSt->execute([
                 ':artist'       => $rawArtist,
                 ':kind'         => $item['kind'] ?? 'article',
-                ':headline'     => $headline,
-                ':excerpt'      => $excerpt ? mb_substr($excerpt, 0, 2000) : null,
-                ':image_url'    => $image ? mb_substr($image, 0, 768) : null,
+                ':headline'     => mb_substr($item['headline'], 0, 500),
+                ':excerpt'      => !empty($item['excerpt']) ? mb_substr($item['excerpt'], 0, 2000) : null,
+                ':image_url'    => !empty($item['image']) ? mb_substr($item['image'], 0, 768) : null,
                 ':url'          => mb_substr($url, 0, 768),
                 ':source'       => $item['source'] ?? null,
                 ':published_at' => $item['publishedAt'] ?? null,

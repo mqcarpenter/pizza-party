@@ -11,35 +11,37 @@ require_once __DIR__ . '/musicbrainz.php';
  *   - "New release" items come from musicbrainz.php diffing an artist's
  *     release-groups against what pizzaparty_release_seen already knew
  *     about, so it fires exactly once per genuinely new album/EP.
- *   - "Article" items come from Google News' public RSS search -- no API
- *     key, no signup, matching how little friction the rest of this app's
- *     enrichment (Last.fm) needed. Tradeoff: it's an unofficial feed, so
- *     results can include tour-date blurbs or loosely-related mentions,
- *     and Google could change its shape without notice -- everything here
- *     degrades to an empty list rather than breaking the sync.
+ *   - "Article" items come from Bing News' public RSS search -- no API
+ *     key, no signup. Google News' RSS was tried first, but its <link>
+ *     is an obfuscated news.google.com wrapper that requires running
+ *     Google's own JavaScript to resolve to the real article -- a plain
+ *     curl (confirmed empirically) just lands on Google's generic
+ *     interstitial page, not the publisher's, so no real excerpt or
+ *     image was ever reachable that way. Bing's RSS gives a direct
+ *     publisher link (or an easily-decoded tracking redirect), a real
+ *     excerpt, and a real thumbnail image, all inline -- no follow-up
+ *     fetch of the article needed at all. Tradeoff: still an unofficial
+ *     feed, so results can include loosely-related mentions, and Bing
+ *     could change its shape without notice -- everything here degrades
+ *     to an empty list rather than breaking the sync.
  */
 
-const GOOGLE_NEWS_RSS_BASE = 'https://news.google.com/rss/search';
+const BING_NEWS_RSS_BASE = 'https://www.bing.com/news/search';
 
 /**
- * A handful of recent articles mentioning an artist. Best-effort: returns
- * [] on any failure rather than throwing, since one artist's feed going
- * quiet must never abort the whole sync run.
+ * A handful of recent articles mentioning an artist, each already carrying
+ * a real excerpt and thumbnail image straight from Bing's own feed.
+ * Best-effort: returns [] on any failure rather than throwing, since one
+ * artist's feed going quiet must never abort the whole sync run.
  */
-function googlenews_fetch(string $artist, int $limit = 6): array {
+function bingnews_fetch(string $artist, int $limit = 6): array {
     $q = $artist . ' (album OR music OR tour)';
-    $url = GOOGLE_NEWS_RSS_BASE . '?' . http_build_query([
-        'q' => $q, 'hl' => 'en-US', 'gl' => 'US', 'ceid' => 'US:en',
-    ]);
+    $url = BING_NEWS_RSS_BASE . '?' . http_build_query(['q' => $q, 'format' => 'RSS']);
 
     $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_TIMEOUT        => 12,
-        CURLOPT_FOLLOWLOCATION => true,
-        // A generic/library User-Agent gets 403'd by some Google front ends
-        // (the same lesson learned the hard way with ESPN's endpoints on
-        // this same host) -- present as an ordinary browser.
         CURLOPT_USERAGENT      => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
             . '(KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
     ]);
@@ -47,7 +49,7 @@ function googlenews_fetch(string $artist, int $limit = 6): array {
     $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
     if ($body === false || $code !== 200) {
-        error_log(sprintf('googlenews: GET failed for "%s" (http %d)', $artist, $code));
+        error_log(sprintf('bingnews: GET failed for "%s" (http %d)', $artist, $code));
         return [];
     }
 
@@ -56,22 +58,35 @@ function googlenews_fetch(string $artist, int $limit = 6): array {
     libxml_use_internal_errors($prevErrors);
     if ($xml === false || !isset($xml->channel->item)) return [];
 
+    // The "News:" namespace URI Bing declares on <rss> embeds the search
+    // query itself (xmlns:News="https://www.bing.com/news/search?q=...."),
+    // so it's different on every request -- has to be read back from this
+    // response rather than hardcoded, or $item->children() silently
+    // returns nothing.
+    $newsNs = $xml->getNamespaces(true)['News'] ?? null;
+
     $out = [];
     foreach ($xml->channel->item as $item) {
-        $title  = trim((string)$item->title);
-        $link   = trim((string)$item->link);
-        $source = trim((string)($item->source ?? ''));
-        // Google News titles its items "Headline - Source"; the source is
-        // also its own separate element, so drop the redundant suffix when
-        // it matches rather than showing the publication name twice.
-        if ($source !== '' && str_ends_with($title, ' - ' . $source)) {
-            $title = substr($title, 0, -strlen(' - ' . $source));
+        $title = trim((string)$item->title);
+        $link  = bingnews_resolve_link(trim((string)$item->link));
+        $ns    = $newsNs ? $item->children($newsNs) : null;
+        $image = trim((string)($ns->Image ?? ''));
+        // News:Image is host-relative sometimes ("/th?id=...") and a plain
+        // URL other times ("http://www.bing.com/th?id=...") -- normalize
+        // to absolute, and ask for a specific size rather than Bing's
+        // template placeholders ("w={0}&h={1}").
+        if ($image !== '') {
+            if ($image[0] === '/') $image = 'https://www.bing.com' . $image;
+            $image = preg_replace('/[?&](w|h)=\{\d\}/', '', $image) . '&w=300&h=225&c=7';
         }
+
         if ($title === '' || $link === '') continue;
         $out[] = [
             'headline'    => $title,
+            'excerpt'     => trim((string)$item->description) ?: null,
+            'image'       => $image ?: null,
             'url'         => $link,
-            'source'      => $source ?: null,
+            'source'      => trim((string)($ns->Source ?? '')) ?: null,
             'publishedAt' => !empty($item->pubDate) ? date('Y-m-d H:i:s', strtotime((string)$item->pubDate)) : null,
         ];
         if (count($out) >= $limit) break;
@@ -80,55 +95,17 @@ function googlenews_fetch(string $artist, int $limit = 6): array {
 }
 
 /**
- * An excerpt and feature image for an article, read off the page's own
- * Open Graph tags -- Google News' RSS carries neither. Also resolves
- * Google's redirect wrapper (news.google.com/rss/articles/...) to the
- * real publisher URL, which is worth doing anyway since that's a far
- * more useful link to hand someone than a Google redirect.
- *
- * Best-effort like everything else here: a paywalled or bot-hostile site
- * just yields no excerpt/image, never a broken item. Capped at ~300KB
- * read (og: tags are almost always in the first few KB of <head>) so one
- * unusually large page can't stall the sync.
+ * Bing wraps some (not all) result links in an apiclick.aspx tracking
+ * redirect with the real URL sitting in its own ?url= query param --
+ * plain text, no JS needed, unlike Google's wrapper. Anything else is
+ * already a direct publisher link.
  */
-function article_og_meta(string $url): array {
-    $bytesRead = 0;
-    $buffer = '';
-    $ch = curl_init($url);
-    curl_setopt_array($ch, [
-        CURLOPT_TIMEOUT        => 10,
-        CURLOPT_FOLLOWLOCATION => true,
-        CURLOPT_MAXREDIRS      => 5,
-        CURLOPT_USERAGENT      => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
-            . '(KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
-        CURLOPT_WRITEFUNCTION  => function ($ch, $chunk) use (&$buffer, &$bytesRead) {
-            $buffer .= $chunk;
-            $bytesRead += strlen($chunk);
-            return $bytesRead > 300_000 ? 0 : strlen($chunk);   // returning 0 aborts the transfer
-        },
-    ]);
-    curl_exec($ch);
-    $finalUrl = curl_getinfo($ch, CURLINFO_EFFECTIVE_URL) ?: $url;
-    curl_close($ch);
-
-    $meta = ['url' => $finalUrl, 'excerpt' => null, 'image' => null];
-    if ($buffer === '') return $meta;
-
-    // Attribute order on og: tags isn't guaranteed (property before content,
-    // or the reverse), so each pattern is tried both ways.
-    $find = function (string $prop) use ($buffer): ?string {
-        $patterns = [
-            '/<meta[^>]+property=["\']' . preg_quote($prop, '/') . '["\'][^>]+content=["\']([^"\']*)["\']/i',
-            '/<meta[^>]+content=["\']([^"\']*)["\'][^>]+property=["\']' . preg_quote($prop, '/') . '["\']/i',
-        ];
-        foreach ($patterns as $p) {
-            if (preg_match($p, $buffer, $m)) return html_entity_decode($m[1], ENT_QUOTES);
-        }
-        return null;
-    };
-    $meta['excerpt'] = $find('og:description');
-    $meta['image']   = $find('og:image');
-    return $meta;
+function bingnews_resolve_link(string $link): string {
+    if (strpos($link, '/news/apiclick.aspx') === false) return $link;
+    $query = parse_url($link, PHP_URL_QUERY);
+    if (!$query) return $link;
+    parse_str($query, $params);
+    return $params['url'] ?? $link;
 }
 
 /**
