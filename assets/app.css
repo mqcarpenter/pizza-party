@@ -324,24 +324,60 @@ body {
 }
 .news-sidebar-h { margin: 0; font-size: 15px; }
 
+/* A feature image + excerpt, like a real news aggregator card -- Google
+   News' RSS gives neither, so both are read off each article's own Open
+   Graph tags at sync time (news.php's article_og_meta()). A card with no
+   image still gets a placeholder swatch so the grid of thumbnails stays
+   even rather than some cards being narrower than others. */
 .news-item {
-  display: block;
+  display: flex;
+  gap: 12px;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 10px 12px;
+  padding: 10px;
   text-decoration: none;
   color: inherit;
 }
 .news-item:hover { border-color: var(--accent); }
+.news-thumb {
+  flex: none;
+  width: 108px;
+  aspect-ratio: 4 / 3;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--line);
+}
+.news-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.news-thumb.placeholder {
+  background: linear-gradient(135deg, var(--accent-bright), #8a4c05);
+  opacity: .35;
+}
+.news-body { flex: 1; min-width: 0; }
 .news-item-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .news-artist { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--accent); }
 .news-badge {
   font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
   background: var(--accent); color: var(--accent-ink); border-radius: 999px; padding: 2px 8px;
 }
-.news-headline { font-size: 14px; font-weight: 600; margin-top: 3px; line-height: 1.35; }
-.news-meta { font-size: 11.5px; color: var(--muted); margin-top: 4px; }
+.news-headline { font-size: 14.5px; font-weight: 700; margin-top: 3px; line-height: 1.3; }
+.news-excerpt {
+  font-size: 12.5px; color: var(--muted); margin-top: 4px; line-height: 1.4;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.news-meta { font-size: 11.5px; color: var(--muted); margin-top: 6px; }
+
+.news-pager {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; margin-top: 6px; padding: 10px 2px 0;
+}
+.news-pager-pos { font-size: 12px; color: var(--muted); }
+.news-pager button {
+  border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+  border-radius: 999px; padding: 7px 14px; font-size: 12.5px; font-weight: 600; cursor: pointer;
+}
+.news-pager button:disabled { opacity: .4; cursor: default; }
+.news-pager button:not(:disabled):hover { border-color: var(--accent); color: var(--accent); }
 
 .event-item {
   display: block;

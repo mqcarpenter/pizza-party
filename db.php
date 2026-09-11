@@ -190,6 +190,29 @@ function require_unlocked(): void {
     }
 }
 
+// ---- News tab: which artists are worth tracking ------------------------
+
+/**
+ * Artists worth tracking for news/events: at least two records between the
+ * collection and wantlist combined, not two in collection specifically --
+ * owning one and wanting a second still means real interest. A collection
+ * of any size has plenty of one-off artists that would otherwise dilute
+ * the feed with a name you own exactly one thing by and don't especially
+ * follow. Used by both sync-news.php and sync-events.php so the two stay
+ * in agreement about who counts.
+ */
+function significant_artists(PDO $pdo): array {
+    return $pdo->query(
+        "SELECT artist FROM (
+            SELECT artist, COUNT(*) c FROM pizzaparty_collection_items
+             WHERE artist IS NOT NULL AND artist != '' GROUP BY artist
+            UNION ALL
+            SELECT artist, COUNT(*) c FROM pizzaparty_wantlist_items
+             WHERE artist IS NOT NULL AND artist != '' GROUP BY artist
+         ) x GROUP BY artist HAVING SUM(c) >= 2"
+    )->fetchAll(PDO::FETCH_COLUMN);
+}
+
 // ---- discogs ----------------------------------------------------------
 
 /** True once the one-time OAuth connect flow has stored an access token. */

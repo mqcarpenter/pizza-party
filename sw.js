@@ -6,11 +6,11 @@
 // evicts a stale app.js/app.css. Bumping the ?v= query strings alone
 // updates what a *browser* fetches; it does nothing for entries this
 // service worker already has stored under the old cache name.
-const VERSION = 'pp-v2';
+const VERSION = 'pp-v3';
 const SHELL = [
   './',
-  './assets/app.css?v=3',
-  './assets/app.js?v=2',
+  './assets/app.css?v=5',
+  './assets/app.js?v=4',
   './icons/icon-192.png'
 ];
 

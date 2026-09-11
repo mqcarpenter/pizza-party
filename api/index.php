@@ -577,15 +577,17 @@ if ($method === 'GET' && $action === 'lastfm-detail') {
 if ($method === 'GET' && $action === 'news') {
     require_unlocked();
     $rows = db()->query(
-        'SELECT artist, kind, headline, url, source, published_at
+        'SELECT artist, kind, headline, excerpt, image_url, url, source, published_at
            FROM pizzaparty_news_items
           ORDER BY (published_at IS NULL), published_at DESC
-          LIMIT 200'
+          LIMIT 300'
     )->fetchAll();
     out(['items' => array_map(fn($r) => [
         'artist'      => $r['artist'],
         'kind'        => $r['kind'],
         'headline'    => $r['headline'],
+        'excerpt'     => $r['excerpt'],
+        'image'       => $r['image_url'],
         'url'         => $r['url'],
         'source'      => $r['source'],
         'publishedAt' => $r['published_at'],
@@ -595,14 +597,15 @@ if ($method === 'GET' && $action === 'news') {
 if ($method === 'GET' && $action === 'events') {
     require_unlocked();
     $rows = db()->query(
-        'SELECT seatgeek_id, artist, title, venue_name, venue_city, venue_state, region, starts_at, url
+        'SELECT external_id, source, artist, title, venue_name, venue_city, venue_state, region, starts_at, url
            FROM pizzaparty_events_cache
           WHERE starts_at IS NULL OR starts_at >= NOW()
           ORDER BY (starts_at IS NULL), starts_at ASC
           LIMIT 200'
     )->fetchAll();
     out(['items' => array_map(fn($r) => [
-        'id'        => (int)$r['seatgeek_id'],
+        'id'        => $r['external_id'],
+        'source'    => $r['source'],
         'artist'    => $r['artist'],
         'title'     => $r['title'],
         'venueName' => $r['venue_name'],

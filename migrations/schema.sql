@@ -133,6 +133,8 @@ CREATE TABLE IF NOT EXISTS pizzaparty_news_items (
   artist         VARCHAR(255) NOT NULL,
   kind           ENUM('article','release') NOT NULL DEFAULT 'article',
   headline       VARCHAR(500) NOT NULL,
+  excerpt        TEXT         DEFAULT NULL,
+  image_url      VARCHAR(768) DEFAULT NULL,
   url            VARCHAR(768) NOT NULL,
   source         VARCHAR(191) DEFAULT NULL,
   published_at   DATETIME     DEFAULT NULL,
@@ -147,7 +149,8 @@ CREATE TABLE IF NOT EXISTS pizzaparty_news_items (
 -- of SeatGeek's own upcoming-events window or has passed).
 CREATE TABLE IF NOT EXISTS pizzaparty_events_cache (
   id             INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-  seatgeek_id    BIGINT UNSIGNED NOT NULL,
+  external_id    VARCHAR(64)  NOT NULL,   -- provider's own event id (numeric or not)
+  source         VARCHAR(16)  NOT NULL DEFAULT 'seatgeek',   -- 'seatgeek' | 'ticketmaster'
   artist         VARCHAR(255) NOT NULL,
   title          VARCHAR(500) NOT NULL,
   venue_name     VARCHAR(255) DEFAULT NULL,
@@ -157,6 +160,6 @@ CREATE TABLE IF NOT EXISTS pizzaparty_events_cache (
   starts_at      DATETIME     DEFAULT NULL,
   url            VARCHAR(768) DEFAULT NULL,
   fetched_at     DATETIME     NOT NULL,
-  UNIQUE KEY uniq_event_artist (seatgeek_id, artist),
+  UNIQUE KEY uniq_event_artist (source, external_id, artist),
   KEY idx_starts (starts_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

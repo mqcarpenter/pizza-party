@@ -80,6 +80,58 @@ function googlenews_fetch(string $artist, int $limit = 6): array {
 }
 
 /**
+ * An excerpt and feature image for an article, read off the page's own
+ * Open Graph tags -- Google News' RSS carries neither. Also resolves
+ * Google's redirect wrapper (news.google.com/rss/articles/...) to the
+ * real publisher URL, which is worth doing anyway since that's a far
+ * more useful link to hand someone than a Google redirect.
+ *
+ * Best-effort like everything else here: a paywalled or bot-hostile site
+ * just yields no excerpt/image, never a broken item. Capped at ~300KB
+ * read (og: tags are almost always in the first few KB of <head>) so one
+ * unusually large page can't stall the sync.
+ */
+function article_og_meta(string $url): array {
+    $bytesRead = 0;
+    $buffer = '';
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_TIMEOUT        => 10,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_MAXREDIRS      => 5,
+        CURLOPT_USERAGENT      => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+            . '(KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+        CURLOPT_WRITEFUNCTION  => function ($ch, $chunk) use (&$buffer, &$bytesRead) {
+            $buffer .= $chunk;
+            $bytesRead += strlen($chunk);
+            return $bytesRead > 300_000 ? 0 : strlen($chunk);   // returning 0 aborts the transfer
+        },
+    ]);
+    curl_exec($ch);
+    $finalUrl = curl_getinfo($ch, CURLINFO_EFFECTIVE_URL) ?: $url;
+    curl_close($ch);
+
+    $meta = ['url' => $finalUrl, 'excerpt' => null, 'image' => null];
+    if ($buffer === '') return $meta;
+
+    // Attribute order on og: tags isn't guaranteed (property before content,
+    // or the reverse), so each pattern is tried both ways.
+    $find = function (string $prop) use ($buffer): ?string {
+        $patterns = [
+            '/<meta[^>]+property=["\']' . preg_quote($prop, '/') . '["\'][^>]+content=["\']([^"\']*)["\']/i',
+            '/<meta[^>]+content=["\']([^"\']*)["\'][^>]+property=["\']' . preg_quote($prop, '/') . '["\']/i',
+        ];
+        foreach ($patterns as $p) {
+            if (preg_match($p, $buffer, $m)) return html_entity_decode($m[1], ENT_QUOTES);
+        }
+        return null;
+    };
+    $meta['excerpt'] = $find('og:description');
+    $meta['image']   = $find('og:image');
+    return $meta;
+}
+
+/**
  * New release-groups for an artist since the last time this ran, as News
  * items ready to insert. Resolves+caches the artist's MBID on first call
  * (pizzaparty_artist_mbid), then diffs release-groups against

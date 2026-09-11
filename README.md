@@ -66,10 +66,22 @@ the `markgrace` card tracker.
     (self-serve, no OAuth) — chosen over Ticketmaster because it aggregates
     independent venues' own box offices too, not just Ticketmaster/Live
     Nation rooms.
-  - All three write to cache tables (`pizzaparty_news_items`,
+  - `ticketmaster.php` is a stand-in for SeatGeek's events while a
+    SeatGeek `client_id` is pending approval — same regions, same
+    fetch-in-bulk-then-match strategy, different provider. Listed in
+    `sync-events.php`'s `$SOURCES` alongside SeatGeek; comment out that
+    entry once SeatGeek is live (running both is harmless, just means a
+    show listed on both providers shows up twice in the sidebar).
+  - Both events sources, and MusicBrainz/Google News for the main feed,
+    only ever consider **significant artists** — `significant_artists()`
+    in `db.php`, two-plus records between collection and wantlist
+    combined — not every artist ever logged. A large collection has
+    plenty of one-off artists that would otherwise dilute the feed
+    without adding anything anyone would call "my music news."
+  - Every source writes to cache tables (`pizzaparty_news_items`,
     `pizzaparty_events_cache`) that `api/index.php`'s `news`/`events`
     actions only ever read — the web app never calls MusicBrainz, Google
-    News, or SeatGeek directly.
+    News, SeatGeek, or Ticketmaster directly.
 
 ## First-time setup
 
@@ -85,6 +97,13 @@ the `markgrace` card tracker.
    - A `'seatgeek' => ['client_id' => '...']` block, for the News tab's
      events sidebar — free self-serve signup at
      https://seatgeek.com/account/develop, no OAuth needed.
+   - A `'ticketmaster' => ['api_key' => '...']` block — SeatGeek's
+     approval can take a while, so `sync-events.php` runs Ticketmaster
+     alongside it in the meantime. Free self-serve key at
+     https://developer-acct.ticketmaster.com/. Remove this block (and
+     comment out its entry in `sync-events.php`'s `$SOURCES`) once
+     SeatGeek is approved and confirmed working, if you'd rather not run
+     both.
 3. Run the schema and grants, as a MySQL admin, against markgrace's database
    (`otbdesig_wp298`). On a fresh install `schema.sql` already includes
    everything; on an existing install, also run the numbered migrations for
@@ -96,6 +115,8 @@ the `markgrace` card tracker.
    mysql -u ADMIN -p otbdesig_wp298 < migrations/migrate-003-lastfm-and-collection-rating.sql
    mysql -u ADMIN -p otbdesig_wp298 < migrations/migrate-004-discogs-resolve-cache.sql
    mysql -u ADMIN -p otbdesig_wp298 < migrations/migrate-005-news-and-events.sql
+   mysql -u ADMIN -p otbdesig_wp298 < migrations/migrate-006-news-excerpt-image.sql
+   mysql -u ADMIN -p otbdesig_wp298 < migrations/migrate-007-events-multi-source.sql
    ```
    Raw `GRANT` statements don't work on cPanel accounts without GRANT
    privilege (common on shared hosting) — if `grants.sql` errors with

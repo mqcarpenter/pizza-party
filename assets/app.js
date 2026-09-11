@@ -444,18 +444,29 @@
      reads the cache via ?action=news / ?action=events, never those
      services directly. */
 
+  var NEWS_PAGE_SIZE = 12;
+  var newsPage = 0;
+
   function newsItemRow(item) {
     var badge = item.kind === 'release'
       ? '<span class="news-badge">New release</span>' : '';
     var when = item.publishedAt ? relTime(item.publishedAt) : '';
     var meta = [item.source, when].filter(Boolean).join(' &middot; ');
+    var thumb = item.image
+      ? '<div class="news-thumb"><img src="' + esc(item.image) + '" alt="" loading="lazy"' +
+        ' onerror="this.parentElement.classList.add(\'placeholder\'); this.remove();"></div>'
+      : '<div class="news-thumb placeholder"></div>';
     return (
       '<a class="news-item" href="' + esc(item.url) + '" target="_blank" rel="noopener">' +
-        '<div class="news-item-top">' +
-          '<span class="news-artist">' + esc(item.artist) + '</span>' + badge +
+        thumb +
+        '<div class="news-body">' +
+          '<div class="news-item-top">' +
+            '<span class="news-artist">' + esc(item.artist) + '</span>' + badge +
+          '</div>' +
+          '<div class="news-headline">' + esc(item.headline) + '</div>' +
+          (item.excerpt ? '<div class="news-excerpt">' + esc(item.excerpt) + '</div>' : '') +
+          (meta ? '<div class="news-meta">' + meta + '</div>' : '') +
         '</div>' +
-        '<div class="news-headline">' + esc(item.headline) + '</div>' +
-        (meta ? '<div class="news-meta">' + meta + '</div>' : '') +
       '</a>'
     );
   }
@@ -480,17 +491,44 @@
       : '<div class="event-item">' + body + '</div>';
   }
 
+  function newsPager(totalPages) {
+    if (totalPages <= 1) return '';
+    var pageNum = newsPage + 1;
+    return (
+      '<div class="news-pager">' +
+        '<button type="button" data-p="prev"' + (newsPage <= 0 ? ' disabled' : '') + '>&larr; Newer</button>' +
+        '<span class="news-pager-pos">Page ' + pageNum + ' of ' + totalPages + '</span>' +
+        '<button type="button" data-p="next"' + (pageNum >= totalPages ? ' disabled' : '') + '>Older &rarr;</button>' +
+      '</div>'
+    );
+  }
+
   function renderNewsPage() {
     var main = document.getElementById('newsMain');
-    main.innerHTML = NEWS.length
-      ? NEWS.map(newsItemRow).join('')
-      : '<p class="stats-empty">No news yet — the next sync will pick some up.</p>';
+    if (!NEWS.length) {
+      main.innerHTML = '<p class="stats-empty">No news yet — the next sync will pick some up.</p>';
+    } else {
+      var totalPages = Math.max(1, Math.ceil(NEWS.length / NEWS_PAGE_SIZE));
+      newsPage = Math.min(newsPage, totalPages - 1);
+      var start = newsPage * NEWS_PAGE_SIZE;
+      var slice = NEWS.slice(start, start + NEWS_PAGE_SIZE);
+      main.innerHTML = slice.map(newsItemRow).join('') + newsPager(totalPages);
+    }
 
     var sidebar = document.getElementById('eventsList');
     sidebar.innerHTML = EVENTS.length
       ? EVENTS.map(eventRow).join('')
       : '<p class="stats-empty">Nothing upcoming yet.</p>';
   }
+
+  document.getElementById('newsMain').addEventListener('click', function (e) {
+    var btn = e.target.closest('.news-pager button');
+    if (!btn || btn.disabled) return;
+    e.preventDefault();
+    newsPage += btn.dataset.p === 'next' ? 1 : -1;
+    renderNewsPage();
+    document.getElementById('newsMain').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
 
   document.getElementById('stats').addEventListener('click', function (e) {
     var row = e.target.closest('.barchart-row');
@@ -872,6 +910,7 @@
       var [n, ev] = await Promise.all([api('?action=news'), api('?action=events')]);
       NEWS = n.items || [];
       EVENTS = ev.items || [];
+      newsPage = 0;
       if (tab === 'news') render();
     } catch (e) {
       if (e.message !== 'locked' && tab === 'news') {
