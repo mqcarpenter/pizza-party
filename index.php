@@ -41,9 +41,7 @@
       <img class="logo" src="assets/logo.png" alt="" width="44" height="44">
       <div>
         <span class="brandline"><span class="dot"></span>licoricepizzareviews.com</span>
-        <h1>Pizza Party
-          <span class="thin">Your records, everywhere</span>
-        </h1>
+        <h1>Pizza Party</h1>
       </div>
     </div>
   </div>
