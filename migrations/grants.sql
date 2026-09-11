@@ -24,6 +24,10 @@ GRANT SELECT                 ON otbdesig_wp298.pizzaparty_sync_state       TO 'o
 -- no DELETE needed.
 GRANT SELECT, INSERT, UPDATE ON otbdesig_wp298.pizzaparty_lastfm_cache      TO 'otbdesig_gracey'@'localhost';
 GRANT SELECT, INSERT, UPDATE ON otbdesig_wp298.pizzaparty_discogs_cache     TO 'otbdesig_gracey'@'localhost';
+-- News/events are read-only from the web app -- only sync-news.php and
+-- sync-events.php (cron, otbdesig_harper) ever write these.
+GRANT SELECT ON otbdesig_wp298.pizzaparty_news_items    TO 'otbdesig_gracey'@'localhost';
+GRANT SELECT ON otbdesig_wp298.pizzaparty_events_cache  TO 'otbdesig_gracey'@'localhost';
 
 -- The sync job (cron, CLI only) needs full read/write on the cache tables
 -- and the ability to record its own runs and store/rotate the OAuth token.
@@ -31,6 +35,9 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON otbdesig_wp298.pizzaparty_collection_ite
 GRANT SELECT, INSERT, UPDATE, DELETE ON otbdesig_wp298.pizzaparty_wantlist_items   TO 'otbdesig_harper'@'localhost';
 GRANT SELECT, INSERT, UPDATE          ON otbdesig_wp298.pizzaparty_discogs_auth    TO 'otbdesig_harper'@'localhost';
 GRANT SELECT, INSERT, UPDATE          ON otbdesig_wp298.pizzaparty_sync_state      TO 'otbdesig_harper'@'localhost';
+GRANT SELECT, INSERT, UPDATE, DELETE ON otbdesig_wp298.pizzaparty_release_seen  TO 'otbdesig_harper'@'localhost';
+GRANT SELECT, INSERT, UPDATE, DELETE ON otbdesig_wp298.pizzaparty_news_items    TO 'otbdesig_harper'@'localhost';
+GRANT SELECT, INSERT, UPDATE, DELETE ON otbdesig_wp298.pizzaparty_events_cache  TO 'otbdesig_harper'@'localhost';
 
 FLUSH PRIVILEGES;
 

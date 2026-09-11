@@ -34,16 +34,42 @@ the `markgrace` card tracker.
   in `pizzaparty_lastfm_cache` for 30 days. Read-only — no OAuth, just an
   API key.
 - **Discogs resolve** (`discogs_oauth.php`'s `discogs_resolve_release()`):
-  each similar-album suggestion is tied back to a real Discogs release —
-  specifically the release its Discogs *master* designates as the
-  `main_release` (Discogs' own pick for the definitive pressing), not every
-  country/format variant a plain search would return — so it's addable to
-  your wantlist directly from the Details panel. Cached in
-  `pizzaparty_discogs_cache` for 30 days.
+  each similar-album suggestion is tied back to a real, *vinyl* Discogs
+  release. This is a vinyl collection tool, so a master's `main_release`
+  (Discogs' own default pick, often a CD or digital release) isn't good
+  enough — this asks the master for its actual Vinyl versions and resolves
+  to the earliest one, along with that pressing's own year, country, and a
+  median across Discogs' price-suggestion tool's per-condition values.
+  Returns nothing addable if no vinyl pressing of the album exists at all.
+  Cached in `pizzaparty_discogs_cache` for 30 days. The live "Search
+  Discogs to add" box and the `search` action are filtered to
+  `format=Vinyl` the same way.
 - **Ratings**: a 5-star control on each card writes Discogs' own rating
   field — the wantlist's native 0-5 rating for Wantlist items, and the
   collection's native per-instance 0-5 rating for Collection items — so it
   round-trips to Discogs like every other write here (Face ID gated).
+- **News tab** (the app's landing tab): artist news for everyone in your
+  Collection and Wantlist, with an "upcoming shows" sidebar.
+  - `musicbrainz.php` + `sync-news.php` detect a genuinely NEW release by
+    diffing each artist's MusicBrainz release-groups against
+    `pizzaparty_release_seen` — an artist's first sync seeds this table
+    without announcing their whole back catalog as news. Keyless; rate-
+    limited to MusicBrainz's own 1 req/sec.
+  - `news.php`'s `googlenews_fetch()` pulls a handful of recent articles
+    per artist from Google News' public RSS search — keyless, but
+    unofficial, so results can be loosely related and the feed's shape
+    could change without notice.
+  - `seatgeek.php` + `sync-events.php` fetch upcoming concerts in three
+    regions (New York, Philadelphia, and 100 miles around DC) in bulk and
+    match performers against the artist set client-side, rather than
+    querying per artist per region. Needs a free SeatGeek `client_id`
+    (self-serve, no OAuth) — chosen over Ticketmaster because it aggregates
+    independent venues' own box offices too, not just Ticketmaster/Live
+    Nation rooms.
+  - All three write to cache tables (`pizzaparty_news_items`,
+    `pizzaparty_events_cache`) that `api/index.php`'s `news`/`events`
+    actions only ever read — the web app never calls MusicBrainz, Google
+    News, or SeatGeek directly.
 
 ## First-time setup
 
@@ -56,6 +82,9 @@ the `markgrace` card tracker.
      at `https://licoricepizzareviews.com/pizzaparty/api/index.php?action=discogs-callback`.
    - A `'lastfm' => ['api_key' => '...']` block — get a key at
      https://www.last.fm/api/account/create (no OAuth needed, just the key).
+   - A `'seatgeek' => ['client_id' => '...']` block, for the News tab's
+     events sidebar — free self-serve signup at
+     https://seatgeek.com/account/develop, no OAuth needed.
 3. Run the schema and grants, as a MySQL admin, against markgrace's database
    (`otbdesig_wp298`). On a fresh install `schema.sql` already includes
    everything; on an existing install, also run the numbered migrations for
@@ -66,6 +95,7 @@ the `markgrace` card tracker.
    mysql -u ADMIN -p otbdesig_wp298 < migrations/migrate-002-wantlist-genres.sql
    mysql -u ADMIN -p otbdesig_wp298 < migrations/migrate-003-lastfm-and-collection-rating.sql
    mysql -u ADMIN -p otbdesig_wp298 < migrations/migrate-004-discogs-resolve-cache.sql
+   mysql -u ADMIN -p otbdesig_wp298 < migrations/migrate-005-news-and-events.sql
    ```
    Raw `GRANT` statements don't work on cPanel accounts without GRANT
    privilege (common on shared hosting) — if `grants.sql` errors with
@@ -85,6 +115,14 @@ the `markgrace` card tracker.
    ```
    php /path/to/pizzaparty/sync-collection.php
    php /path/to/pizzaparty/sync-wantlist.php
+   ```
+   Also add the News tab's two sync scripts, on a longer interval (e.g.
+   every 6 hours) — MusicBrainz's 1 req/sec limit means a full pass over a
+   large collection can take a while, and neither news nor "what's playing
+   nearby" needs to be fresher than that:
+   ```
+   php /path/to/pizzaparty/sync-news.php
+   php /path/to/pizzaparty/sync-events.php
    ```
 7. Open the site on your iPhone, tap the lock button, and register the
    device — from then on, wantlist edits need Face ID from that phone.

@@ -5,7 +5,9 @@
   var API = 'api/';
   var COLLECTION = [];
   var WANTLIST = [];
-  var tab = 'collection';           // 'collection' | 'wantlist' | 'stats'
+  var NEWS = [];
+  var EVENTS = [];
+  var tab = 'news';                 // 'news' | 'collection' | 'wantlist' | 'stats'
   var query = '';
   var view = 'list';                // 'list' | 'grid'
   var sortBy = 'artist';            // 'artist' | 'year' | 'title'
@@ -335,9 +337,19 @@
   }
 
   function render() {
-    document.getElementById('searchrow').classList.toggle('hide', tab === 'stats');
-    document.getElementById('sortrow').classList.toggle('hide', tab === 'stats');
+    var isBrowseTab = tab === 'collection' || tab === 'wantlist';
+    document.getElementById('searchrow').classList.toggle('hide', !isBrowseTab);
+    document.getElementById('sortrow').classList.toggle('hide', !isBrowseTab);
     document.getElementById('stats').classList.toggle('hide', tab !== 'stats');
+    document.getElementById('news').classList.toggle('hide', tab !== 'news');
+
+    if (tab === 'news') {
+      list.innerHTML = '';
+      empty.classList.add('hide');
+      document.getElementById('genreChips').classList.add('hide');
+      renderNewsPage();
+      return;
+    }
     if (tab === 'stats') {
       list.innerHTML = '';
       empty.classList.add('hide');
@@ -424,6 +436,60 @@
 
     document.getElementById('genreChart').innerHTML = barChart(genreCounts, 12, 'genre');
     document.getElementById('artistChart').innerHTML = barChart(artistCounts, 12, 'artist');
+  }
+
+  /* ---------- News tab: artist news (main) + nearby shows (sidebar) ----
+     Both feeds are pre-built server-side by sync-news.php/sync-events.php
+     (MusicBrainz + Google News RSS; SeatGeek for events) — this only ever
+     reads the cache via ?action=news / ?action=events, never those
+     services directly. */
+
+  function newsItemRow(item) {
+    var badge = item.kind === 'release'
+      ? '<span class="news-badge">New release</span>' : '';
+    var when = item.publishedAt ? relTime(item.publishedAt) : '';
+    var meta = [item.source, when].filter(Boolean).join(' &middot; ');
+    return (
+      '<a class="news-item" href="' + esc(item.url) + '" target="_blank" rel="noopener">' +
+        '<div class="news-item-top">' +
+          '<span class="news-artist">' + esc(item.artist) + '</span>' + badge +
+        '</div>' +
+        '<div class="news-headline">' + esc(item.headline) + '</div>' +
+        (meta ? '<div class="news-meta">' + meta + '</div>' : '') +
+      '</a>'
+    );
+  }
+
+  function formatEventDate(iso) {
+    if (!iso) return 'Date TBA';
+    var d = new Date(iso.replace(' ', 'T'));
+    if (isNaN(d.getTime())) return 'Date TBA';
+    var dateStr = d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+    var timeStr = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    return dateStr + ' · ' + timeStr;
+  }
+
+  function eventRow(ev) {
+    var place = [ev.venueName, ev.venueCity].filter(Boolean).join(', ');
+    var body =
+      '<div class="event-artist">' + esc(ev.artist) + '</div>' +
+      '<div class="event-venue">' + esc(place) + '</div>' +
+      '<div class="event-when">' + esc(formatEventDate(ev.startsAt)) + '</div>';
+    return ev.url
+      ? '<a class="event-item" href="' + esc(ev.url) + '" target="_blank" rel="noopener">' + body + '</a>'
+      : '<div class="event-item">' + body + '</div>';
+  }
+
+  function renderNewsPage() {
+    var main = document.getElementById('newsMain');
+    main.innerHTML = NEWS.length
+      ? NEWS.map(newsItemRow).join('')
+      : '<p class="stats-empty">No news yet — the next sync will pick some up.</p>';
+
+    var sidebar = document.getElementById('eventsList');
+    sidebar.innerHTML = EVENTS.length
+      ? EVENTS.map(eventRow).join('')
+      : '<p class="stats-empty">Nothing upcoming yet.</p>';
   }
 
   document.getElementById('stats').addEventListener('click', function (e) {
@@ -765,6 +831,7 @@
         document.getElementById('gate').classList.add('hide');
         document.getElementById('app').classList.remove('hide');
         boot();
+        bootNews();
       }
     } catch (ex) {
       err.textContent = 'Wrong passphrase.';
@@ -793,6 +860,23 @@
     } catch (e) {
       if (e.message !== 'locked') {
         list.innerHTML = '<div class="empty">Could not load data: ' + esc(e.message) + '</div>';
+      }
+    }
+  }
+
+  /* News/events load independently of the collection/wantlist fetch above --
+     neither should block the other, and News is the landing tab, so it
+     should paint as soon as its own two calls are back. */
+  async function bootNews() {
+    try {
+      var [n, ev] = await Promise.all([api('?action=news'), api('?action=events')]);
+      NEWS = n.items || [];
+      EVENTS = ev.items || [];
+      if (tab === 'news') render();
+    } catch (e) {
+      if (e.message !== 'locked' && tab === 'news') {
+        document.getElementById('newsMain').innerHTML =
+          '<p class="stats-empty">Could not load news: ' + esc(e.message) + '</p>';
       }
     }
   }
@@ -826,6 +910,7 @@
     } catch (e) {}
     document.getElementById('app').classList.remove('hide');
     boot();
+    bootNews();
   })();
 
   if ('serviceWorker' in navigator) {

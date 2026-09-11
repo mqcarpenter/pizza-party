@@ -304,6 +304,63 @@ body {
 .stats-sub { margin: 0 0 14px; font-size: 12px; color: var(--muted); }
 .stats-empty { color: var(--muted); font-size: 13px; }
 
+/* ---- News tab: main feed + sidebar events ---------------------------
+   Side-by-side once there's room for both at a comfortable reading width;
+   sidebar drops below the feed on a phone rather than squeezing two
+   columns into one. This is the app's landing tab, so it's the one place
+   that most benefits from the wider .wrap added for desktop. */
+.news-page { display: grid; margin: 16px 0; gap: 20px; grid-template-columns: 1fr 300px; align-items: start; }
+.news-main { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.news-sidebar {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px;
+  position: sticky;
+  /* Roughly the sticky tabs bar's own height on this tab -- the
+     searchrow/sortrow/genrechips controls are all hidden here, so it's
+     just the tab pills plus the sticky container's padding. */
+  top: 64px;
+}
+.news-sidebar-h { margin: 0; font-size: 15px; }
+
+.news-item {
+  display: block;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  text-decoration: none;
+  color: inherit;
+}
+.news-item:hover { border-color: var(--accent); }
+.news-item-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.news-artist { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--accent); }
+.news-badge {
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+  background: var(--accent); color: var(--accent-ink); border-radius: 999px; padding: 2px 8px;
+}
+.news-headline { font-size: 14px; font-weight: 600; margin-top: 3px; line-height: 1.35; }
+.news-meta { font-size: 11.5px; color: var(--muted); margin-top: 4px; }
+
+.event-item {
+  display: block;
+  padding: 9px 0;
+  border-top: 1px solid var(--line);
+  text-decoration: none;
+  color: inherit;
+}
+.news-sidebar #eventsList .event-item:first-child { border-top: none; }
+.event-item:hover .event-artist { color: var(--accent); }
+.event-artist { font-size: 13px; font-weight: 700; }
+.event-venue { font-size: 12px; color: var(--muted); margin-top: 1px; }
+.event-when { font-size: 11.5px; color: var(--muted); margin-top: 2px; font-variant-numeric: tabular-nums; }
+
+@media (max-width: 900px) {
+  .news-page { grid-template-columns: 1fr; }
+  .news-sidebar { position: static; }
+}
+
 /* A small vinyl-record glyph — echoes the app's own logo motif — used as a
    section icon and again (spinning, on hover) as a decorative stat-tile
    watermark. Purely decorative: it never carries data, so it needs no

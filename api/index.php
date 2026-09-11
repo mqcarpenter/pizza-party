@@ -569,4 +569,49 @@ if ($method === 'GET' && $action === 'lastfm-detail') {
     }
 }
 
+// ---- News tab: articles/new-releases + nearby events (read-only) -----
+// Both are pure reads off cache tables kept fresh by sync-news.php /
+// sync-events.php (cron) -- the web app never calls MusicBrainz, Google
+// News, or SeatGeek directly.
+
+if ($method === 'GET' && $action === 'news') {
+    require_unlocked();
+    $rows = db()->query(
+        'SELECT artist, kind, headline, url, source, published_at
+           FROM pizzaparty_news_items
+          ORDER BY (published_at IS NULL), published_at DESC
+          LIMIT 200'
+    )->fetchAll();
+    out(['items' => array_map(fn($r) => [
+        'artist'      => $r['artist'],
+        'kind'        => $r['kind'],
+        'headline'    => $r['headline'],
+        'url'         => $r['url'],
+        'source'      => $r['source'],
+        'publishedAt' => $r['published_at'],
+    ], $rows)]);
+}
+
+if ($method === 'GET' && $action === 'events') {
+    require_unlocked();
+    $rows = db()->query(
+        'SELECT seatgeek_id, artist, title, venue_name, venue_city, venue_state, region, starts_at, url
+           FROM pizzaparty_events_cache
+          WHERE starts_at IS NULL OR starts_at >= NOW()
+          ORDER BY (starts_at IS NULL), starts_at ASC
+          LIMIT 200'
+    )->fetchAll();
+    out(['items' => array_map(fn($r) => [
+        'id'        => (int)$r['seatgeek_id'],
+        'artist'    => $r['artist'],
+        'title'     => $r['title'],
+        'venueName' => $r['venue_name'],
+        'venueCity' => $r['venue_city'],
+        'venueState'=> $r['venue_state'],
+        'region'    => $r['region'],
+        'startsAt'  => $r['starts_at'],
+        'url'       => $r['url'],
+    ], $rows)]);
+}
+
 out(['error' => 'Unknown endpoint.'], 404);

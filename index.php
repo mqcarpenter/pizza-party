@@ -55,7 +55,8 @@
 
     <div class="sticky">
       <div class="tabs" id="tabs" role="tablist">
-        <button class="tab" type="button" data-tab="collection" aria-selected="true">Collection</button>
+        <button class="tab" type="button" data-tab="news" aria-selected="true">News</button>
+        <button class="tab" type="button" data-tab="collection" aria-selected="false">Collection</button>
         <button class="tab" type="button" data-tab="wantlist" aria-selected="false">Wantlist</button>
         <button class="tab" type="button" data-tab="stats" aria-selected="false">Stats</button>
       </div>
@@ -91,6 +92,15 @@
         <button type="submit">Search</button>
       </form>
       <div class="searchresults hide" id="searchResults"></div>
+    </div>
+
+    <div class="news-page" id="news">
+      <main class="news-main" id="newsMain"></main>
+      <aside class="news-sidebar" id="newsSidebar">
+        <h2 class="news-sidebar-h">Upcoming shows</h2>
+        <p class="stats-sub">NYC &middot; Philadelphia &middot; 100mi of DC</p>
+        <div id="eventsList"></div>
+      </aside>
     </div>
 
     <main id="list"></main>
