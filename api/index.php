@@ -317,8 +317,11 @@ if ($method === 'GET' && $action === 'search') {
     $q = trim((string)($_GET['q'] ?? ''));
     if ($q === '') out(['error' => 'Missing q.'], 400);
 
+    // This is a vinyl collection tool -- Discogs' own 'format' filter keeps
+    // CD/cassette/etc. pressings out of the results entirely rather than
+    // filtering them client-side after the fact.
     [$status, $json] = discogs_signed_request('GET', DISCOGS_API_BASE . '/database/search', [
-        'q' => $q, 'type' => 'release', 'per_page' => 25, 'page' => 1,
+        'q' => $q, 'type' => 'release', 'format' => 'Vinyl', 'per_page' => 25, 'page' => 1,
     ]);
     if ($status !== 200) out(['error' => 'Discogs search failed.', 'detail' => $json], 502);
 

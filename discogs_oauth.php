@@ -234,10 +234,11 @@ function discogs_resolve_cache_put(string $key, ?array $payload): void {
  * "similar album" suggestion and that data almost never changes.
  */
 function discogs_resolve_release(string $artist, string $title): ?array {
-    // v2: added year/country/medianPrice. Bumped so rows cached under the
-    // old shape (before this release) miss and refetch instead of serving
-    // an incomplete cached value for up to DISCOGS_RESOLVE_CACHE_TTL_DAYS.
-    $key = 'resolve|v2|' . strtolower($artist . '|' . $title);
+    // v3: resolves to an actual Vinyl version instead of the master's
+    // main_release (which could be any format). Bumped again so rows
+    // cached under the old shape/semantics refetch instead of serving a
+    // possibly-non-vinyl release for up to DISCOGS_RESOLVE_CACHE_TTL_DAYS.
+    $key = 'resolve|v3|' . strtolower($artist . '|' . $title);
     // A cache miss and a cached "no match" both decode to null here, so an
     // unresolvable title gets retried against Discogs once per TTL window
     // rather than being remembered as permanently unresolvable — an
@@ -255,13 +256,23 @@ function discogs_resolve_release(string $artist, string $title): ?array {
             return null;
         }
 
-        $releaseId = $result['main_release'] ?? null;
-        if (!$releaseId && !empty($result['id'])) {
-            // Some search responses omit main_release inline — fetch the master.
-            [$mStatus, $mJson] = discogs_signed_request('GET', DISCOGS_API_BASE . '/masters/' . $result['id']);
-            if ($mStatus === 200) $releaseId = $mJson['main_release'] ?? null;
+        // This is a vinyl collection tool, and a master's main_release is
+        // whatever format Discogs happens to default to for that album --
+        // often a CD or a digital release, not a pressing anyone here could
+        // add to a wantlist. Ask the master for its actual vinyl versions
+        // instead of trusting main_release at all.
+        $masterId = $result['id'] ?? null;
+        $releaseId = null;
+        if ($masterId) {
+            [$vStatus, $vJson] = discogs_signed_request(
+                'GET', DISCOGS_API_BASE . '/masters/' . $masterId . '/versions',
+                ['format' => 'Vinyl', 'per_page' => 1, 'sort' => 'released', 'sort_order' => 'asc']
+            );
+            if ($vStatus === 200) $releaseId = $vJson['versions'][0]['id'] ?? null;
         }
         if (!$releaseId) {
+            // No vinyl pressing of this album exists on Discogs at all --
+            // nothing here is addable, so there's nothing to resolve to.
             discogs_resolve_cache_put($key, null);
             return null;
         }
